@@ -1,1 +1,1 @@
-{"updated":1779045015,"total_worldwide":10445,"fleet_ids_configured":["3070333771"],"fleet_ids_present":[],"fleet":{}}
+{"updated":1779046144,"total_worldwide":10465,"fleet_ids_configured":["3070333771"],"fleet_ids_present":["3070333771"],"fleet":{"3070333771":{"longName":"Farls Danvers Solar","shortName":"2714","hwModel":"RAK4631","role":"ROUTER_LATE","latitude":425984000,"longitude":-709623808,"altitude":40,"precision":13,"seenBy":{"msh/US/2/e/LongFast/!b701934b":1779046025}}}}
