@@ -1,8 +1,16 @@
 # Farley Mesh Fleet
 
-Live dashboard for the family's Meshtastic mesh network. Tracks 3 solar nodes (Danvers MA + 2 in NH) and any mobile nodes that get added.
+Live dashboard for the family's Meshtastic mesh network.
 
 🔗 **Live dashboard:** https://fructifyme.github.io/mesh-fleet/
+
+## Fleet
+
+| Site | Device | WiFi | GPS | MQTT path |
+|---|---|---|---|---|
+| Danvers, MA (Mike's roof) | RAK WisMesh Repeater Mini | ❌ | ❌ fixed | via neighbor gateways |
+| Jim's house + mobile | LILYGO T-Deck Plus EXT | ✅ | ✅ | direct (home WiFi); GPS trail when mobile |
+| Merrymeeting Lake (Jim's cabin) | RAK WisBlock Starter Kit | ❌ | ❌ fixed | only when T-Deck or hotspot is at the camp |
 
 ## What it does
 
@@ -22,7 +30,7 @@ Live dashboard for the family's Meshtastic mesh network. Tracks 3 solar nodes (D
 
 ## Adding a mobile node to the dashboard
 
-Edit the `SITES` array near the top of `mesh-fleet.html`'s `<script>` tag and add a new entry with `mobile: true, type: "tracker"`. The dashboard will auto-render a live trail as MQTT position updates arrive.
+Edit the `SITES` array near the top of `index.html`'s `<script>` tag and add a new entry with `mobile: true, type: "tracker"`. The dashboard will auto-render a live trail as MQTT position updates arrive.
 
 ## Privacy
 
@@ -34,7 +42,7 @@ Edit the `SITES` array near the top of `mesh-fleet.html`'s `<script>` tag and ad
 
 | File | Purpose |
 |---|---|
-| `mesh-fleet.html` | The dashboard (static, hosted via GitHub Pages) |
+| `index.html` | The dashboard (static, hosted via GitHub Pages) |
 | `node_health.py` | USB-connected diagnostic — runs 7-point meshmap visibility check |
 | `reset_keys.py` | Force PKI key regen (workaround for meshtastic CLI bug) |
 

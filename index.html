@@ -186,17 +186,37 @@
   </section>
 
   <section>
-    <h2>Brother's Nodes — Field Kit</h2>
-    <div class="ref">
-      <p>When he plugs his solar nodes into a PC with Python + meshtastic CLI installed:</p>
-      <ol>
-        <li><code>python reset_keys.py</code> — regenerate unique PKI keys</li>
-        <li>Edit <code>farls-danvers-solar-optimized.yaml</code> — change <code>owner</code>, <code>owner_short</code>, <code>lat/lon/alt</code></li>
-        <li><code>meshtastic --port COMx --configure farls-danvers-solar-optimized.yaml</code></li>
-        <li><code>meshtastic --port COMx --ch-index 0 --ch-set uplink_enabled true --ch-set downlink_enabled true</code></li>
-        <li>Import the shared channel URL (above) via the Meshtastic phone app to add FarleyFam</li>
-        <li><code>python node_health.py COMx</code> — verify the 7-point checklist passes</li>
-      </ol>
+    <h2>Jim's Nodes — Field Setup</h2>
+    <div class="kvs">
+      <div class="ref">
+        <h3>📟 LILYGO T-Deck Plus EXT (house + mobile)</h3>
+        <p>This is a standalone Meshtastic computer — no phone needed. Setup is done <strong>on the device itself</strong> using its touchscreen + keyboard. Most important things:</p>
+        <ol>
+          <li><strong>Set owner:</strong> Settings → Device → set Long Name (e.g. "Jim T-Deck") and Short Name (4 chars max)</li>
+          <li><strong>Set region:</strong> Settings → LoRa → Region → <code>US</code></li>
+          <li><strong>Set role:</strong> Settings → Device → Role → <code>CLIENT</code> (not Router — this device moves)</li>
+          <li><strong>Enable WiFi (at home):</strong> Settings → Network → WiFi → SSID + password → enables direct MQTT gateway</li>
+          <li><strong>Enable MQTT:</strong> Settings → Module → MQTT → on → broker <code>mqtt.meshtastic.org</code> / user <code>meshdev</code> / pwd <code>large4cats</code></li>
+          <li><strong>Enable GPS:</strong> Settings → Position → GPS Mode → Enabled, smart broadcast on</li>
+          <li><strong>OK to MQTT:</strong> Settings → LoRa → Config OK to MQTT → on</li>
+          <li><strong>Import FarleyFam:</strong> scan the QR code or paste the shared channel URL (above) — uses the camera or USB connection from a phone</li>
+          <li><strong>Channel 0 uplink:</strong> Settings → Channels → 0 → Uplink Enabled + Downlink Enabled</li>
+        </ol>
+        <p style="font-size: 11px; color: var(--text-dim);">Once configured at home, his T-Deck becomes a gateway for the whole local NH mesh too — a real contribution to the community.</p>
+      </div>
+      <div class="ref">
+        <h3>📦 RAK WisBlock Starter Kit (Merrymeeting cabin)</h3>
+        <p>Same architecture as your Repeater Mini: nRF52840, no WiFi. Setup via USB to a PC:</p>
+        <ol>
+          <li><code>python reset_keys.py</code> (adjust COM port) — unique PKI keys</li>
+          <li>Edit <code>farls-danvers-solar-optimized.yaml</code> — change <code>owner</code> (e.g. "Jim Lake Cabin"), <code>owner_short</code> (e.g. "JLC"), <code>lat/lon</code> (cabin coords), <code>alt</code></li>
+          <li><code>meshtastic --port COMx --configure farls-danvers-solar-optimized.yaml</code></li>
+          <li><code>meshtastic --port COMx --ch-index 0 --ch-set uplink_enabled true --ch-set downlink_enabled true</code></li>
+          <li>Add FarleyFam: <code>meshtastic --port COMx --ch-add FarleyFam --ch-index 1 --ch-set psk &lt;the_psk&gt; --ch-set uplink_enabled true --ch-set downlink_enabled true</code> (use the PSK from your dashboard ⚙ Settings)</li>
+          <li><code>python node_health.py COMx</code> — verify 7-point checklist</li>
+        </ol>
+        <p style="font-size: 11px; color: var(--text-dim);">⚠️ At the lake without internet, this node won't appear on meshmap until Jim brings his T-Deck up (or you add Starlink/cell at the cabin).</p>
+      </div>
     </div>
   </section>
 </main>
@@ -241,31 +261,24 @@
       notes: "Optimized + unique PKI key + FarleyFam channel."
     },
     {
-      id: "kensington", label: "Kensington, NH — Brother's House",
+      id: "jim-tdeck", label: "Jim — T-Deck (House + Mobile)",
       owner: "(set when configured)", shortName: "",
       nodeId: "", numericNodeId: null,
-      lat: 42.9367, lon: -70.9706, alt: null,
-      role: "(ROUTER_LATE)", hardware: "NomadStar solar unit",
-      mobile: false, type: "fixed",
-      notes: "Approximate coords — update with brother's actual address. Needs key regen."
+      lat: 42.9367, lon: -70.9706, alt: null,    // Kensington NH approx; auto-updates via GPS
+      role: "CLIENT", hardware: "LILYGO T-Deck Plus EXT (ESP32-S3 + WiFi + GPS)",
+      mobile: true, type: "tracker",
+      notes: "Standalone Meshtastic computer with screen + keyboard. WiFi-connected at home → direct MQTT gateway. GPS broadcasts position when mobile — live trail renders here automatically."
     },
     {
-      id: "merrymeeting", label: "Merrymeeting Lake, NH — Brother's Camp",
+      id: "jim-lake", label: "Merrymeeting Lake, NH — Lake Cabin",
       owner: "(set when configured)", shortName: "",
       nodeId: "", numericNodeId: null,
-      lat: 43.5258, lon: -71.1789, alt: null,
-      role: "(ROUTER_LATE)", hardware: "NomadStar solar unit",
+      lat: 43.5258, lon: -71.1789, alt: null,    // approximate — update with actual cabin coords
+      role: "ROUTER_LATE", hardware: "RAK WisBlock Meshtastic Starter Kit (RAK4631, no WiFi)",
       mobile: false, type: "fixed",
-      notes: "Remote — likely no gateway in RF range. Needs a WiFi node at the camp for meshmap visibility."
+      notes: "No WiFi. Visible on meshmap only when Jim's T-Deck (or a hotspot) is at the camp to gateway. Otherwise it's a fixed local-mesh anchor at the lake."
     }
-    // === Add mobile nodes here as your brother gets them, e.g.:
-    // {
-    //   id: "brother-mobile", label: "Brother — Mobile (TRACKER)",
-    //   nodeId: "!xxxxxxxx", numericNodeId: null,
-    //   lat: 42.5884, lon: -70.9744,   // last known
-    //   mobile: true, type: "tracker",
-    //   notes: "Hiking/car node — see live trail on map."
-    // }
+    // === Add more tracker nodes here as needed
   ];
 
   // ============================================================
