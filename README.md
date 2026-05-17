@@ -14,12 +14,18 @@
 
 ## Distance reality check (pure LoRa)
 
+Travel corridor: **I-95 north** from Danvers to Kensington, then **Route 16 north** through Rochester / Wakefield, then **Route 11 west** to Alton / Merrymeeting Lake.
+
 | Path | Direct distance | Status |
 |---|---|---|
-| Danvers → Kensington NH | 24 mi | Edge of single-hop; reachable with 2 hops + good antennas |
-| Danvers → Merrymeeting NH | 66 mi | At the practical limit of multi-hop hobby mesh; needs more deployed nodes along I-93 OR rooftop gain antennas at both ends |
+| Danvers → Kensington NH | 24 mi | Edge of single-hop; reachable with 2 hops + decent antennas |
+| Danvers → Merrymeeting NH | 66 mi | Needs help in the middle — there's existing mesh density at the lake (3 nodes within 6 mi of cabin) but a gap between Kensington and Strafford County |
 
-LoRa LongFast typical real-world single-hop is 5-15 mi (much more with elevation/clear sight). Meshtastic max hop_limit is 7. Dashboard's Coverage Analysis section shows the visible MA/NH nodes along the corridor — note that meshmap-only data understates true node density (pure-LoRa nodes never seen by an MQTT gateway are invisible to this view).
+**Lake-end coverage already exists:** `KC1MUR_NewDurham` (2 mi from cabin), `GBC Wolfeboro` (4 mi), `PineconeNet-RAK3312-1` (6 mi). Jim's WisBlock should drop into that mesh as-is.
+
+**The bottleneck is Strafford County NH** — only `Mastodon2` (Strafford) is visible there. A relay in Gonic/Rochester or Barrington would close the link.
+
+LoRa LongFast typical real-world single-hop is 5-15 mi (much more with elevation/clear sight). Meshtastic max hop_limit is 7. The dashboard's Coverage Analysis section breaks this down with proposed relay locations + cost matrix.
 
 ## The MQTT bridge (opportunistic, not core)
 

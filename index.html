@@ -137,7 +137,7 @@
   <section>
     <div class="layout">
       <div>
-        <h2>Network Map <span style="color: var(--text-dim); font-size: 11px; font-weight: 400; margin-left: 8px;">colored markers = fleet · gray dots = <span id="corridor-count">0</span> other meshmap-visible nodes in MA/NH (potential LoRa relays)</span></h2>
+        <h2>Network Map <span style="color: var(--text-dim); font-size: 11px; font-weight: 400; margin-left: 8px;">colored circles = fleet · gray dots = <span id="corridor-count">0</span> existing MA/NH nodes · <span style="color: #ff9933;">◆</span> orange diamonds = proposed relay sites</span></h2>
         <div id="map"></div>
       </div>
       <div>
@@ -186,43 +186,62 @@
   <section>
     <h2>Coverage Analysis — Pure LoRa Reach</h2>
     <div class="ref">
-      <p style="margin-top: 0;"><strong>Goal:</strong> grid-down comms from Mike (Danvers MA) to Jim's two NH sites, using only LoRa (no Internet, no WiFi, no satellite, no cell). MQTT is opportunistic, not required.</p>
+      <p style="margin-top: 0;"><strong>Goal:</strong> grid-down comms from Mike (Danvers MA) to Jim's two NH sites, pure LoRa, no Internet / WiFi / satellite / cell.</p>
 
-      <h3>Distances</h3>
+      <h3>Actual travel corridor (not I-95/I-93)</h3>
       <ul>
-        <li><strong>Danvers → Kensington NH</strong>: 24 mi line-of-sight</li>
-        <li><strong>Danvers → Merrymeeting Lake NH</strong>: 66 mi line-of-sight</li>
+        <li><strong>Danvers → Kensington NH</strong>: I-95 north, 24 mi line-of-sight</li>
+        <li><strong>Kensington → Merrymeeting Lake NH</strong>: <strong>Route 16 north</strong> through Rochester → Wakefield, then <strong>Route 11 west</strong> through Alton. ~40 mi driving, 35 mi line-of-sight</li>
       </ul>
 
-      <h3>Current reachability estimate (greedy chain through meshmap-visible nodes)</h3>
+      <h3>What the meshmap data shows for our corridor</h3>
+      <p><strong>The lake end is already well-covered.</strong> Three existing nodes within 6 mi of Merrymeeting:</p>
+      <ul>
+        <li><code>c5f2</code> <strong>KC1MUR_NewDurham</strong> at (43.53, -71.13) — <strong>2 mi from Jim's cabin</strong></li>
+        <li><code>LTP1</code> <strong>PineconeNet-RAK3312-1</strong> at (43.46, -71.25) — 6 mi from cabin</li>
+        <li><code>GBC</code> <strong>GBC Base - Wolfeboro</strong> at (43.58, -71.21) — 4 mi from cabin</li>
+      </ul>
+      <p>Jim's WisBlock at the cabin should drop into the existing local mesh on first power-on. No additional infrastructure needed at the lake end.</p>
+
+      <p><strong>The bottleneck is the middle</strong> — between Kensington (Jim's house) and the Strafford County mesh-edge. The only meshmap-visible node up that way is:</p>
+      <ul>
+        <li><code>MAST</code> <strong>Mastodon2</strong> at (43.25, -70.94) — 22 mi from Kensington, 22 mi from the lake. A single ~22-mi LoRa hop is at the edge of what's reliable without elevation + gain antennas. <strong>This is the gap we need to close.</strong></li>
+      </ul>
+
+      <h3>Where ONE relay would do the most</h3>
+      <p>Both candidates require elevation + a real antenna (5-6 dBi) to bridge ~20 mi single hop reliably:</p>
       <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
-        <tr style="border-bottom: 1px solid var(--border);"><th style="text-align:left; padding: 4px;">Target</th><th style="text-align:left; padding: 4px;">10 mi/hop (conservative)</th><th style="text-align:left; padding: 4px;">20 mi/hop (rooftop antennas, clear paths)</th></tr>
-        <tr><td style="padding: 4px;">Kensington NH</td><td style="padding: 4px; color: var(--bad);">NOT REACHED — 2-hop dead-end heading wrong direction</td><td style="padding: 4px; color: var(--good);">REACHED in 2 hops</td></tr>
-        <tr><td style="padding: 4px;">Merrymeeting NH</td><td style="padding: 4px; color: var(--bad);">NOT REACHED</td><td style="padding: 4px; color: var(--bad);">NOT REACHED in 6 hops</td></tr>
+        <tr style="border-bottom: 1px solid var(--border);"><th style="text-align:left; padding: 4px;">Candidate location</th><th style="text-align:left; padding: 4px;">to Kensington</th><th style="text-align:left; padding: 4px;">to NewDurham (lake mesh edge)</th><th style="text-align:left; padding: 4px;">why it works</th></tr>
+        <tr><td style="padding: 4px;"><strong>Gonic / S Rochester</strong> (Rt 16 + Rt 125)</td><td style="padding: 4px;">23 mi</td><td style="padding: 4px;">~5 mi to Mastodon2 (which is 5 mi from the lake mesh)</td><td style="padding: 4px;">Sits directly on Rt 16 itself — strategic for the wider community mesh too</td></tr>
+        <tr><td style="padding: 4px;"><strong>Barrington NH</strong> (Rt 9 + Rt 125)</td><td style="padding: 4px;">20 mi</td><td style="padding: 4px;">~5 mi to Mastodon2</td><td style="padding: 4px;">Best balanced distance both ways</td></tr>
       </table>
 
-      <h3>Why these numbers are conservative</h3>
-      <ul>
-        <li><strong>meshmap.net only shows nodes that have ever been seen by an MQTT-uplinking gateway.</strong> Pure-LoRa-only nodes never appear. Real node density is likely 2-5x what the gray dots show.</li>
-        <li>The greedy single-path model underestimates the real protocol — Meshtastic broadcast-floods, so any reachable node along the way retransmits.</li>
-        <li><strong>In a real grid-down scenario, more people deploy nodes</strong> (because they have to). Network gets denser, gap closes.</li>
-      </ul>
+      <h3>Realistic option matrix</h3>
+      <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+        <tr style="border-bottom: 1px solid var(--border);"><th style="text-align:left; padding: 4px;">Option</th><th style="text-align:right; padding: 4px;">$</th><th style="text-align:left; padding: 4px;">Kensington</th><th style="text-align:left; padding: 4px;">Lake cabin</th></tr>
+        <tr><td style="padding: 4px;">Deploy what you have, hop_limit 7, no extras</td><td style="padding: 4px; text-align: right;">$0</td><td style="padding: 4px;">Probably yes (24 mi via Mastodon2)</td><td style="padding: 4px;">Maybe — depends on Kensington reaching Mastodon2</td></tr>
+        <tr><td style="padding: 4px;"><strong>Antenna upgrade on Danvers + lake WisBlock</strong> (5-6 dBi vertical + SMA, ~$30 each)</td><td style="padding: 4px; text-align: right;">$60-100</td><td style="padding: 4px;">Very likely</td><td style="padding: 4px;">Likely (existing NH nodes do the rest)</td></tr>
+        <tr><td style="padding: 4px;">Add a second solar repeater in Gonic/Rochester (a third RAK WisMesh Repeater Mini)</td><td style="padding: 4px; text-align: right;">$130</td><td style="padding: 4px;">Definite</td><td style="padding: 4px;">Definite, with redundancy</td></tr>
+        <tr><td style="padding: 4px;">Both antenna upgrades AND a relay</td><td style="padding: 4px; text-align: right;">$230</td><td style="padding: 4px;">Bombproof</td><td style="padding: 4px;">Bombproof</td></tr>
+      </table>
+      <p style="font-size: 12px; color: var(--text-dim);">Highest-leverage first move: antenna upgrade. Your RAK WisMesh Repeater Mini has an SMA connector — a $25 6 dBi vertical on a roof mount can take single-hop range from ~10 mi to 20-30 mi.</p>
 
-      <h3>What's been done to maximize pure-LoRa reach</h3>
+      <h3>What's already done to maximize pure-LoRa reach</h3>
       <ul>
-        <li><code>lora.hop_limit</code> bumped from 3 → <code>7</code> (max). Single change roughly doubles regional reach.</li>
+        <li><code>lora.hop_limit</code> bumped 3 → <strong>7</strong> (max). Single change roughly doubles regional reach.</li>
         <li><code>lora.tx_power = 30</code> (max legal for 915 MHz US ISM).</li>
         <li><code>lora.sx126x_rx_boosted_gain = true</code> (better RX sensitivity, small power cost).</li>
-        <li>Role = <code>ROUTER_LATE</code> for fixed/elevated nodes — actively rebroadcasts mesh traffic without colliding.</li>
-        <li>FarleyFam channel encryption with strong PSK — messages travel over LoRa encrypted end-to-end, no plaintext over the mesh.</li>
+        <li>Role = <code>ROUTER_LATE</code> for fixed nodes — rebroadcasts after a delay to avoid collisions.</li>
+        <li>FarleyFam channel: 256-bit PSK, end-to-end encrypted over LoRa — no plaintext on the mesh.</li>
       </ul>
 
-      <h3>How to close the Merrymeeting gap</h3>
-      <ul>
-        <li><strong>Antenna upgrade</strong> on the lake-cabin WisBlock + Danvers roof — external gain antenna with elevation. Single-hop range of 30-50 mi is achievable with good placement on both ends.</li>
-        <li><strong>Seed a relay node halfway</strong> — anywhere in southern/central NH along the I-93 corridor. A solar repeater at a friend's place in Concord/Manchester would basically guarantee the link.</li>
-        <li><strong>Recruit nodes</strong> — every Meshtastic user in MA/NH along this path strengthens the chain. Public LongFast channel is open; any node helps.</li>
-      </ul>
+      <h3>Conservative reachability table (worst-case)</h3>
+      <p style="font-size: 12px; color: var(--text-dim);">Computed via greedy single-path traversal of meshmap-visible nodes. Real Meshtastic broadcast-floods, so actual reach is more forgiving. And meshmap doesn't see pure-LoRa-only nodes — real density is likely 2-5× higher.</p>
+      <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+        <tr style="border-bottom: 1px solid var(--border);"><th style="text-align:left; padding: 4px;">Target</th><th style="text-align:left; padding: 4px;">10 mi/hop (no antenna upgrade)</th><th style="text-align:left; padding: 4px;">20 mi/hop (rooftop antennas)</th></tr>
+        <tr><td style="padding: 4px;">Kensington NH</td><td style="padding: 4px; color: var(--bad);">2-hop dead end</td><td style="padding: 4px; color: var(--good);">REACHED in 2 hops</td></tr>
+        <tr><td style="padding: 4px;">Merrymeeting NH</td><td style="padding: 4px; color: var(--bad);">Not reached</td><td style="padding: 4px; color: var(--warn);">Not reached without a Strafford-area relay (or antenna both ends)</td></tr>
+      </table>
     </div>
   </section>
 
@@ -368,6 +387,26 @@
     // === Add more tracker nodes here as needed
   ];
 
+  // Proposed relay locations to bridge Kensington <-> Lake on pure LoRa.
+  // Rendered as orange diamond markers; not actual deployed nodes.
+  const RELAY_CANDIDATES = [
+    { id: "gonic", label: "Proposed: Gonic / S Rochester NH",
+      lat: 43.2737, lon: -70.9523,
+      note: "On Rt 16 itself. 23 mi to Kensington, 21 mi to lake. Best strategic spot for the wider community mesh." },
+    { id: "barrington", label: "Proposed: Barrington NH (Rt 9 + Rt 125)",
+      lat: 43.22, lon: -71.025,
+      note: "20 mi to Kensington, 22 mi to lake. Most balanced distance. Also covers Rt 9 traffic." },
+  ];
+
+  // Key existing meshmap-visible nodes that already help bridge the corridor.
+  // Highlighted with a gold ring so you can see they're load-bearing.
+  const KEY_NEIGHBORS = {
+    "862511996":  "1-hop neighbor (Marblehead area)",
+    "1149316082": "MAST Mastodon2 - 22mi from both Kensington and lake",
+    "1149281490": "KC1MUR_NewDurham - 2mi from Jim's lake cabin",
+    "1148947080": "GBC Wolfeboro - 4mi from lake",
+  };
+
   // ============================================================
   //  STATE
   // ============================================================
@@ -459,7 +498,30 @@
   }
 
   SITES.forEach(placeOrMoveMarker);
-  const bounds = L.latLngBounds(SITES.map(s => [s.lat, s.lon]));
+
+  // Render proposed relay candidates as orange diamond markers
+  RELAY_CANDIDATES.forEach(r => {
+    const icon = L.divIcon({
+      className: "",
+      html: `<div style="
+        width: 18px; height: 18px;
+        background: #ff9933;
+        border: 2px solid #fff;
+        transform: rotate(45deg);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+      "></div>`,
+      iconSize: [18, 18], iconAnchor: [9, 9]
+    });
+    L.marker([r.lat, r.lon], { icon })
+      .addTo(map)
+      .bindPopup(`<div style="font-family: -apple-system, sans-serif; min-width: 220px;">
+        <strong>${r.label}</strong><br/>
+        <span style="font-size: 11px; color: #666;">(${r.lat.toFixed(4)}, ${r.lon.toFixed(4)})</span><br/>
+        <div style="margin-top: 6px; font-size: 12px;">${r.note}</div>
+      </div>`);
+  });
+
+  const bounds = L.latLngBounds([...SITES.map(s => [s.lat, s.lon]), ...RELAY_CANDIDATES.map(r => [r.lat, r.lon])]);
   map.fitBounds(bounds, { padding: [40, 40] });
 
   // ============================================================
