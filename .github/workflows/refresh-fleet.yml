@@ -1,0 +1,62 @@
+name: Refresh fleet snapshot
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # every 5 min (best-effort on GH Actions)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-fleet
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch meshmap.net/nodes.json and filter to fleet
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sf --retry 3 --retry-delay 5 --max-time 60 \
+            -o /tmp/all.json https://meshmap.net/nodes.json
+          python3 - <<'PY'
+          import json, time, os
+          all_data = json.load(open('/tmp/all.json'))
+          # Numeric node IDs of fleet members. Add new ones here as they come online.
+          FLEET_IDS = [
+              "3070333771",   # Danvers, MA  -- Farls Danvers Solar (!b701934b)
+              # "...",        # Jim T-Deck (add once known)
+              # "...",        # Jim Lake Cabin WisBlock (add once known)
+          ]
+          fleet = {nid: all_data[nid] for nid in FLEET_IDS if nid in all_data}
+          out = {
+              "updated":              int(time.time()),
+              "total_worldwide":      len(all_data),
+              "fleet_ids_configured": FLEET_IDS,
+              "fleet_ids_present":    list(fleet.keys()),
+              "fleet":                fleet,
+          }
+          with open("fleet.json", "w") as f:
+              json.dump(out, f, separators=(",", ":"))
+          print(f"Wrote fleet.json: {len(fleet)}/{len(FLEET_IDS)} fleet members present, "
+                f"{len(all_data)} nodes worldwide.")
+          PY
+
+      - name: Commit if changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fleet.json
+          if git diff --staged --quiet; then
+            echo "No changes -- skipping commit."
+          else
+            git commit -m "chore: refresh fleet snapshot ($(date -u +%Y-%m-%dT%H:%MZ))"
+            git push
+          fi

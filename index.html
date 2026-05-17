@@ -229,11 +229,11 @@
     <label>FarleyFam Channel PSK (base64) — saved for the future live-MQTT bridge feature</label>
     <input type="password" id="farleyfam-psk" placeholder="e.g. 4jrBSv6oep7L0+jvoKF1XRMWoF1uYs4gCXErakscjWA=" />
 
-    <label>Poll interval in seconds (default: 60, min: 15)</label>
+    <label>Poll interval in seconds (default: 60, min: 15) — how often to re-read fleet.json</label>
     <input type="text" id="mqtt-region" placeholder="60" value="60" />
 
-    <label>CORS proxy prefix (default: api.cors.lol)</label>
-    <input type="text" id="mqtt-url" placeholder="https://api.cors.lol/?url=" />
+    <label>fleet.json URL (default: ./fleet.json, same-origin from GitHub Pages)</label>
+    <input type="text" id="mqtt-url" placeholder="./fleet.json" />
 
     <div class="footer">
       <button class="btn" onclick="closeSettings()">Cancel</button>
@@ -415,33 +415,42 @@
   renderCards();
 
   // ============================================================
-  //  MESHMAP POLLING
+  //  FLEET POLLING  (reads fleet.json built by .github/workflows/refresh-fleet.yml,
+  //  which fetches meshmap.net/nodes.json every 5 min and filters to our fleet)
   // ============================================================
-  const MESHMAP_URL = "https://meshmap.net/nodes.json";
+  const FLEET_JSON_URL = "./fleet.json";
 
   function setPollStatus(state, label) {
     const el = document.getElementById("poll-status");
     el.className = "conn-status " + state;
-    el.querySelector(".text").textContent = "meshmap.net: " + label;
+    el.querySelector(".text").textContent = label;
   }
 
   async function pollMeshmap() {
-    setPollStatus("connecting", "fetching…");
+    setPollStatus("connecting", "fetching fleet.json…");
     try {
-      const proxy = SETTINGS.corsProxy || "https://api.cors.lol/?url=";
-      const url = proxy + encodeURIComponent(MESHMAP_URL);
+      // cache-bust with a timestamp so we always pull the latest committed version
+      const url = FLEET_JSON_URL + "?t=" + Date.now();
       const resp = await fetch(url, { cache: "no-store" });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      WORLDWIDE_NODE_COUNT = Object.keys(data).length;
+      const wrapped = await resp.json();
+      const data = wrapped.fleet || {};
+      WORLDWIDE_NODE_COUNT = wrapped.total_worldwide || 0;
+      const updatedMs = (wrapped.updated || 0) * 1000;
       processSnapshot(data);
       LAST_POLL_TS = Date.now();
       document.getElementById("last-refreshed").textContent =
-        "Last poll: " + new Date(LAST_POLL_TS).toLocaleTimeString();
-      setPollStatus("connected", `${WORLDWIDE_NODE_COUNT.toLocaleString()} nodes worldwide`);
+        "Snapshot age: " + (updatedMs ? timeAgo(updatedMs) : "unknown") +
+        " • Polled " + new Date(LAST_POLL_TS).toLocaleTimeString();
+      const fleetCount = Object.keys(data).length;
+      const configured = (wrapped.fleet_ids_configured || []).length;
+      setPollStatus(
+        "connected",
+        `${fleetCount}/${configured} fleet on meshmap • ${WORLDWIDE_NODE_COUNT.toLocaleString()} worldwide`
+      );
     } catch (err) {
       console.error("Poll failed:", err);
-      setPollStatus("disconnected", "error — " + err.message);
+      setPollStatus("disconnected", "error: " + err.message);
     }
   }
 
