@@ -22,7 +22,8 @@ import meshtastic.serial_interface
 from pubsub import pub
 import paho.mqtt.client as mqtt_client
 
-PORT      = sys.argv[1] if len(sys.argv) > 1 else "COM9"
+_args = [a for a in sys.argv[1:] if not a.startswith("--")]
+PORT      = _args[0] if _args else "COM9"
 BROKER    = "mqtt.meshtastic.org"
 BROKER_PORT = 1883
 USERNAME  = "meshdev"
