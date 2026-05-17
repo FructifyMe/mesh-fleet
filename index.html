@@ -184,55 +184,49 @@
   </section>
 
   <section>
-    <h2>👋 Hey Jim — Start Here</h2>
+    <h2>Jim — Onboarding Reference</h2>
     <div class="ref">
-      <p style="margin-top: 0; font-size: 14px;">Mike here. Here's everything you need for our mesh network — bookmark this page on your phone, it's the single source of truth and updates automatically.</p>
 
-      <h3 style="margin-top: 18px;">Tonight (before we meet)</h3>
-      <ol>
-        <li><strong>Install the Meshtastic app on your phone</strong>
-          — <a href="https://apps.apple.com/us/app/meshtastic/id1586432531" target="_blank">iOS</a>
-          / <a href="https://play.google.com/store/apps/details?id=com.geeksville.mesh" target="_blank">Android</a>
-        </li>
-        <li><strong>Don't unbox or power up either node yet</strong> — I want to flash them properly first so we don't hit the same shared-PKI-key problem I had.</li>
-        <li><strong>Bring with you:</strong> both nodes (T-Deck + WisBlock), the USB-C cable each came with, and your home WiFi password.</li>
-      </ol>
+      <h3 style="margin-top: 0;">Mesh state</h3>
+      <ul>
+        <li>Region <code>US</code>, default LongFast preset, 915&nbsp;MHz</li>
+        <li>2 channels: PRIMARY <code>LongFast</code> (default PSK <code>AQ==</code>, uplink+downlink enabled) and SECONDARY <code>FarleyFam</code> (256-bit PSK, uplink+downlink enabled, encrypted)</li>
+        <li>Public broker <code>mqtt.meshtastic.org:1883</code> — username <code>meshdev</code> / password <code>large4cats</code>. <strong>TCP-only, no WSS</strong> (so <code>client.meshtastic.org</code> cannot gateway; native TCP clients only)</li>
+        <li>Only known mesh node so far: <code>!b701934b</code> "Farls Danvers Solar" / <code>2714</code> (RAK4631, ROUTER_LATE, fixed 42.5885,-70.9745). MapReport interval 3600s, position 1800s, nodeinfo 10800s.</li>
+      </ul>
 
-      <h3 style="margin-top: 18px;">📲 Scan to join our family channel</h3>
-      <p>Once your Meshtastic app is installed, scan this QR code with your phone. Imports both the public LongFast channel AND our private encrypted <strong>FarleyFam</strong> channel:</p>
+      <h3>FarleyFam channel</h3>
+      <p style="margin: 6px 0;">Name <code>FarleyFam</code> · PSK (base64 256-bit): <code id="farleyfam-psk-text" style="user-select: all;">4jrBSv6oep7L0+jvoKF1XRMWoF1uYs4gCXErakscjWA=</code></p>
+      <p style="margin: 6px 0;">Add via CLI: <code>meshtastic --port &lt;port&gt; --ch-add FarleyFam --ch-index 1 --ch-set psk base64:4jrBSv6oep7L0+jvoKF1XRMWoF1uYs4gCXErakscjWA= --ch-set uplink_enabled true --ch-set downlink_enabled true</code></p>
+      <p style="margin: 6px 0;">Or scan QR / open link (imports both channels):</p>
 
-      <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; background: white; padding: 16px; border-radius: 8px; margin: 12px 0;">
-        <img alt="FarleyFam channel QR code"
-             src="https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=2&data=https%3A%2F%2Fmeshtastic.org%2Fe%2F%23CgsSAQEoATABOgIIDQoxEiDiOsFK_qh6nsvT6O-goXVdExagXW5iziAJcStqSxyNYBoJRmFybGV5RmFtKAEwARIPCAE4AUADSAFQHmgByAYB"
-             style="width: 240px; height: 240px; display: block;" />
-        <div style="flex: 1; min-width: 240px; color: #111;">
-          <p style="margin: 0 0 8px; font-weight: 600;">Or open this link on your phone:</p>
-          <p style="margin: 0; font-family: var(--mono); font-size: 10px; word-break: break-all; color: #444;">
-            <a href="https://meshtastic.org/e/#CgsSAQEoATABOgIIDQoxEiDiOsFK_qh6nsvT6O-goXVdExagXW5iziAJcStqSxyNYBoJRmFybGV5RmFtKAEwARIPCAE4AUADSAFQHmgByAYB" target="_blank" style="color: #0066cc;">https://meshtastic.org/e/#CgsSAQEoATABOgIIDQoxEiDiOsFK_qh6nsvT6O-goXVdExagXW5iziAJcStqSxyNYBoJRmFybGV5RmFtKAEwARIPCAE4AUADSAFQHmgByAYB</a>
-          </p>
-        </div>
+      <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap; background: white; padding: 14px; border-radius: 8px; margin: 8px 0;">
+        <img alt="FarleyFam channel QR"
+             src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=2&data=https%3A%2F%2Fmeshtastic.org%2Fe%2F%23CgsSAQEoATABOgIIDQoxEiDiOsFK_qh6nsvT6O-goXVdExagXW5iziAJcStqSxyNYBoJRmFybGV5RmFtKAEwARIPCAE4AUADSAFQHmgByAYB"
+             style="width: 220px; height: 220px; display: block;" />
+        <p style="flex: 1; min-width: 240px; margin: 0; font-family: var(--mono); font-size: 10px; word-break: break-all; color: #444;">
+          <a href="https://meshtastic.org/e/#CgsSAQEoATABOgIIDQoxEiDiOsFK_qh6nsvT6O-goXVdExagXW5iziAJcStqSxyNYBoJRmFybGV5RmFtKAEwARIPCAE4AUADSAFQHmgByAYB" target="_blank" style="color: #0066cc;">https://meshtastic.org/e/#CgsSAQEoATABOgIIDQoxEiDiOsFK_qh6nsvT6O-goXVdExagXW5iziAJcStqSxyNYBoJRmFybGV5RmFtKAEwARIPCAE4AUADSAFQHmgByAYB</a>
+        </p>
       </div>
 
-      <h3 style="margin-top: 18px;">Your two nodes — what they do</h3>
+      <h3>Known gotchas</h3>
       <ul>
-        <li><strong>LILYGO T-Deck Plus EXT</strong> (the one with the screen + keyboard) — your personal device. Use it at home OR carry it around. Has WiFi + GPS, so it talks to the internet directly when on your home network, and broadcasts your location when you're out.</li>
-        <li><strong>RAK WisBlock Starter Kit</strong> — lives at the lake cabin. Extends mesh range there. No internet, so it's mostly useful as a relay for any other Meshtastic users in the area.</li>
+        <li><strong>NomadStar firmware bundles ship with a hardcoded PKI keypair</strong> — every unit has the same pub/priv key out of the box. Confirmed by seeing 2+ nodes in the area with identical <code>publicKey</code>. Fix: <code>--factory-reset-device</code> via admin message; CLI bug requires sending the int directly, not bool — see <a href="https://github.com/FructifyMe/mesh-fleet/blob/main/reset_keys.py" target="_blank"><code>reset_keys.py</code></a>.</li>
+        <li><strong><code>mqtt.enabled</code> silently held false</strong> on nRF52 builds with no WiFi until <code>mqtt.proxy_to_client_enabled</code> is also true. Set both together.</li>
+        <li><strong>nRF52 nodes need an external MQTT gateway</strong> (phone app, web client, or PC bridge). Phone app on Android is unreliable in background. Web client can't reach the broker (no WSS). See <a href="https://github.com/FructifyMe/mesh-fleet/blob/main/mqtt_bridge.py" target="_blank"><code>mqtt_bridge.py</code></a> for the native-TCP fallback if you want a deterministic test path.</li>
       </ul>
 
-      <h3 style="margin-top: 18px;">Tomorrow when we meet</h3>
-      <ol>
-        <li>I configure the T-Deck (~15 min via its own screen — you can do it, I'll talk you through)</li>
-        <li>I configure the WisBlock via my PC (~10 min — it gets the same setup I did for my own node)</li>
-        <li>We test FarleyFam messaging between your T-Deck and my Danvers node</li>
-        <li>I show you this dashboard — bookmark it on your phone</li>
-      </ol>
+      <h3>Dashboard pipeline</h3>
+      <p style="margin: 4px 0;">GitHub Action <code>refresh-fleet.yml</code> fetches <code>meshmap.net/nodes.json</code> every 5 min, filters to <code>FLEET_IDS</code>, commits <code>fleet.json</code>. <code>index.html</code> polls <code>./fleet.json</code> same-origin. To add your nodes: append numeric node IDs to <code>FLEET_IDS</code> in the workflow + update the <code>SITES</code> array in <code>index.html</code> with labels/coords.</p>
+      <p style="margin: 4px 0;">Repo: <a href="https://github.com/FructifyMe/mesh-fleet" target="_blank">github.com/FructifyMe/mesh-fleet</a> — open a PR or just push to <code>main</code>.</p>
 
-      <h3 style="margin-top: 18px;">After</h3>
+      <h3>Your hardware</h3>
       <ul>
-        <li>Your T-Deck at home in Kensington = self-sufficient. Stays visible on the maps as long as it's powered on + on your WiFi.</li>
-        <li>The lake WisBlock = local-mesh only until/unless someone adds internet at the cabin. Still works for short-range messaging up there.</li>
-        <li>Any time anything breaks, text me or just open this page — you'll see status of all 3 nodes (my Danvers + your two) here.</li>
+        <li><strong>LILYGO T-Deck Plus EXT</strong> — ESP32-S3 + SX1262 + GPS + 320×240 LCD + keyboard + 2000mAh. Has WiFi → set as its own MQTT gateway at home (proxy_to_client off, native MQTT on). Best role: <code>CLIENT</code> since mobile.</li>
+        <li><strong>RAK WisBlock Meshtastic Starter Kit (116016)</strong> — RAK4631 (nRF52840 + SX1262), no WiFi, same architecture as my Danvers unit. For Merrymeeting (no internet): set <code>ROUTER_LATE</code>, fixed position, accept it'll be local-mesh only. Could be brought online via your T-Deck or any hotspot you bring up there.</li>
       </ul>
+
+      <p style="font-size: 11px; color: var(--text-dim); margin-top: 16px;">If you bring both nodes to me, I have the CLI toolkit (meshtastic-python, the reset script, the optimized config YAML) ready on COM9 — happy to flash for you, or you can do it yourself from any machine with Python. Repo has everything.</p>
     </div>
   </section>
 
