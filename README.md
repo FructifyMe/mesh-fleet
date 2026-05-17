@@ -14,12 +14,15 @@ Live dashboard for the family's Meshtastic mesh network.
 
 ## What it does
 
-- Live map of all family nodes
-- Real-time MQTT feed from `mqtt.meshtastic.org` (public LongFast + private FarleyFam channels)
-- Per-node battery, position, last-heard
-- GPS trail rendering for mobile nodes
-- Channel sharing via QR/URL
-- Diagnostic + setup scripts for getting new nodes online
+- Polls `meshmap.net/nodes.json` (via `api.cors.lol` CORS proxy) every 60s
+- Renders each fleet node on a Leaflet map, with status / battery / last-heard / which gateways heard us
+- Builds a GPS trail for mobile/tracker nodes from successive poll snapshots
+- Tracks **changes between polls** (node appeared, mobile node moved X km, etc.)
+- Diagnostic + setup scripts for bringing new nodes online over USB
+
+## What it does NOT do (yet)
+
+- **Live messaging.** The official `mqtt.meshtastic.org` broker is TCP-only — no WebSocket — so a static webpage can't connect to it directly. Adding real-time messaging requires a Cloudflare Worker bridge (WSS ↔ TCP). The FarleyFam PSK is preserved in Settings for that day.
 
 ## Adding a new node
 
