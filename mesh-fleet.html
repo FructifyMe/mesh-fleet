@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Farley Mesh Fleet</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+<style>
+  :root {
+    --bg: #0b0f14;
+    --panel: #131a23;
+    --panel-2: #1a2330;
+    --border: #2a3645;
+    --text: #e6edf3;
+    --text-dim: #9aa7b4;
+    --accent: #4cc2ff;
+    --good: #3fb950;
+    --warn: #d29922;
+    --bad: #f85149;
+    --purple: #b084ff;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, #0e151c, #0b0f14);
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: 0.3px; }
+  header .meta { color: var(--text-dim); font-size: 12px; font-family: var(--mono); }
+  header .header-right { display: flex; gap: 12px; align-items: center; }
+
+  .conn-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--border); font-family: var(--mono); }
+  .conn-status .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .conn-status.connected .dot { background: var(--good); box-shadow: 0 0 8px var(--good); }
+  .conn-status.connecting .dot { background: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
+  .conn-status.disconnected .dot { background: var(--bad); }
+  @keyframes pulse { 50% { opacity: 0.4; } }
+
+  main { padding: 16px 20px 48px; max-width: 1500px; margin: 0 auto; }
+  section { margin-bottom: 20px; }
+  section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin: 0 0 10px; font-weight: 600; }
+
+  .layout { display: grid; grid-template-columns: 1fr 380px; gap: 18px; }
+  @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; } }
+
+  #map { height: 480px; width: 100%; border-radius: 10px; border: 1px solid var(--border); }
+
+  .feed { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 0; height: 480px; display: flex; flex-direction: column; }
+  .feed-tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .feed-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; font-size: 13px; color: var(--text-dim); border-bottom: 2px solid transparent; user-select: none; }
+  .feed-tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  .feed-tab .count { background: var(--panel-2); padding: 1px 7px; border-radius: 10px; font-size: 11px; margin-left: 6px; }
+  .feed-content { flex: 1; overflow-y: auto; padding: 10px; }
+  .feed-msg { padding: 8px 10px; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .feed-msg:last-child { border-bottom: none; }
+  .feed-msg .sender { color: var(--accent); font-weight: 600; font-family: var(--mono); font-size: 12px; }
+  .feed-msg .time { color: var(--text-dim); font-size: 11px; float: right; font-family: var(--mono); }
+  .feed-msg .body { margin-top: 4px; }
+  .feed-msg.system .body { color: var(--text-dim); font-style: italic; }
+  .feed-msg.position .body { color: var(--purple); font-family: var(--mono); font-size: 11px; }
+  .feed-msg.farleyfam { background: rgba(176,132,255,0.05); border-left: 3px solid var(--purple); padding-left: 7px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .card h3 { margin: 0 0 4px; font-size: 15px; display: flex; align-items: center; gap: 6px; }
+  .card .sub { color: var(--text-dim); font-size: 11px; margin-bottom: 10px; font-family: var(--mono); }
+  .card dl { margin: 0; display: grid; grid-template-columns: 90px 1fr; gap: 4px 10px; font-size: 12px; }
+  .card dt { color: var(--text-dim); }
+  .card dd { margin: 0; font-family: var(--mono); }
+  .card .live { color: var(--good); font-weight: 600; }
+  .card .actions { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .btn { display: inline-block; padding: 5px 10px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); border-radius: 5px; text-decoration: none; font-size: 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #001a26; border-color: var(--accent); font-weight: 600; }
+  .btn.purple { background: var(--purple); color: #0b0014; border-color: var(--purple); font-weight: 600; }
+
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+  .badge.good { background: rgba(63,185,80,0.15); color: var(--good); border: 1px solid rgba(63,185,80,0.35); }
+  .badge.warn { background: rgba(210,153,34,0.15); color: var(--warn); border: 1px solid rgba(210,153,34,0.35); }
+  .badge.bad  { background: rgba(248,81,73,0.15); color: var(--bad); border: 1px solid rgba(248,81,73,0.35); }
+  .badge.info { background: rgba(76,194,255,0.12); color: var(--accent); border: 1px solid rgba(76,194,255,0.35); }
+  .badge.live { background: rgba(63,185,80,0.2); color: var(--good); border: 1px solid var(--good); }
+
+  .ref { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; font-size: 12px; line-height: 1.6; }
+  .ref h3 { margin: 0 0 8px; font-size: 13px; }
+  .ref ul { margin: 4px 0 10px 18px; padding: 0; }
+  .ref li { margin-bottom: 3px; }
+  .ref code { background: var(--panel-2); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+  pre { background: #060a0f; border: 1px solid var(--border); padding: 10px; border-radius: 6px; overflow-x: auto; font-size: 11px; color: #c5d1de; word-break: break-all; white-space: pre-wrap; }
+  .kvs { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 800px) { .kvs { grid-template-columns: 1fr; } }
+  a { color: var(--accent); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .dot.good { background: var(--good); box-shadow: 0 0 8px var(--good); }
+  .dot.warn { background: var(--warn); }
+  .dot.bad  { background: var(--bad); }
+  .dot.unknown { background: var(--text-dim); }
+
+  /* Settings dialog */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 5000; }
+  .modal-backdrop.open { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 24px; min-width: 400px; max-width: 600px; }
+  .modal h2 { margin-top: 0; }
+  .modal label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+  .modal input[type=text], .modal input[type=password] { width: 100%; padding: 8px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-family: var(--mono); font-size: 12px; margin-bottom: 12px; }
+  .modal .footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+
+  /* Live position pulse */
+  .pulse-marker { width: 16px; height: 16px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 0 var(--good); animation: pulse-marker 2s infinite; }
+  @keyframes pulse-marker {
+    0% { box-shadow: 0 0 0 0 rgba(63,185,80,0.7); }
+    70% { box-shadow: 0 0 0 12px rgba(63,185,80,0); }
+    100% { box-shadow: 0 0 0 0 rgba(63,185,80,0); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>📡 Farley Mesh Fleet</h1>
+  </div>
+  <div class="header-right">
+    <span id="mqtt-status" class="conn-status connecting">
+      <span class="dot"></span><span class="text">MQTT: connecting…</span>
+    </span>
+    <button class="btn" onclick="openSettings()">⚙ Settings</button>
+    <span class="meta" id="last-refreshed">—</span>
+  </div>
+</header>
+
+<main>
+  <section>
+    <div class="layout">
+      <div>
+        <h2>Network Map</h2>
+        <div id="map"></div>
+      </div>
+      <div>
+        <h2>Live Feed</h2>
+        <div class="feed">
+          <div class="feed-tabs">
+            <div class="feed-tab active" data-tab="all">All <span class="count" id="count-all">0</span></div>
+            <div class="feed-tab" data-tab="longfast">LongFast <span class="count" id="count-longfast">0</span></div>
+            <div class="feed-tab" data-tab="farleyfam">FarleyFam <span class="count" id="count-farleyfam">0</span></div>
+            <div class="feed-tab" data-tab="positions">Positions <span class="count" id="count-positions">0</span></div>
+          </div>
+          <div class="feed-content" id="feed-content">
+            <div class="feed-msg system">
+              <div class="body">Waiting for MQTT connection…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Sites &amp; Nodes <span style="color: var(--text-dim); font-size: 11px; font-weight: 400; margin-left: 8px;">(green dot = updated live via MQTT)</span></h2>
+    <div class="grid" id="site-cards"></div>
+  </section>
+
+  <section>
+    <h2>Quick Reference</h2>
+    <div class="kvs">
+      <div class="ref">
+        <h3>📱 Pairing &amp; Apps</h3>
+        <ul>
+          <li><strong>Phone app:</strong> Meshtastic (<a href="https://apps.apple.com/us/app/meshtastic/id1586432531" target="_blank">iOS</a> / <a href="https://play.google.com/store/apps/details?id=com.geeksville.mesh" target="_blank">Android</a>)</li>
+          <li><strong>Web client (USB or BLE):</strong> <a href="https://client.meshtastic.org/" target="_blank">client.meshtastic.org</a></li>
+          <li><strong>BLE PIN:</strong> <code>123456</code></li>
+          <li><strong>BLE range:</strong> ~30 ft, less through walls.</li>
+        </ul>
+      </div>
+      <div class="ref">
+        <h3>🔐 Share with Brother</h3>
+        <p style="margin-top: 0;">Send him this <strong>Complete Channel URL</strong> via Signal/iMessage. When he opens it on his phone with the Meshtastic app installed, both LongFast + FarleyFam channels import automatically.</p>
+        <pre id="shared-channel-url">https://meshtastic.org/e/#CgsSAQEoATABOgIIDQoxEiDiOsFK_qh6nsvT6O-goXVdExagXW5izi AJcStqSxyNYBoJRmFybGV5RmFtKAEwARIPCAE4AUADSAFQHmgByAYB</pre>
+        <p style="color: var(--text-dim); font-size: 11px;">Brother should also run the key-regen on his own nodes — see "To-Do" section below.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Brother's Nodes — Field Kit</h2>
+    <div class="ref">
+      <p>When he plugs his solar nodes into a PC with Python + meshtastic CLI installed:</p>
+      <ol>
+        <li><code>python reset_keys.py</code> — regenerate unique PKI keys</li>
+        <li>Edit <code>farls-danvers-solar-optimized.yaml</code> — change <code>owner</code>, <code>owner_short</code>, <code>lat/lon/alt</code></li>
+        <li><code>meshtastic --port COMx --configure farls-danvers-solar-optimized.yaml</code></li>
+        <li><code>meshtastic --port COMx --ch-index 0 --ch-set uplink_enabled true --ch-set downlink_enabled true</code></li>
+        <li>Import the shared channel URL (above) via the Meshtastic phone app to add FarleyFam</li>
+        <li><code>python node_health.py COMx</code> — verify the 7-point checklist passes</li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<!-- Settings Modal -->
+<div class="modal-backdrop" id="settings-modal">
+  <div class="modal">
+    <h2>⚙ Settings</h2>
+    <p style="color: var(--text-dim); font-size: 13px;">Stored in your browser localStorage. Never sent to any server. Never committed to the repo.</p>
+
+    <label>FarleyFam Channel PSK (base64) — paste from your node config</label>
+    <input type="password" id="farleyfam-psk" placeholder="e.g. 4jrBSv6oep7L0+jvoKF1XRMWoF1uYs4gCXErakscjWA=" />
+
+    <label>Region prefix in MQTT topic (default: US)</label>
+    <input type="text" id="mqtt-region" placeholder="US" value="US" />
+
+    <label>Custom MQTT broker (default: wss://mqtt.meshtastic.org:443/mqtt)</label>
+    <input type="text" id="mqtt-url" placeholder="wss://mqtt.meshtastic.org:443/mqtt" />
+
+    <div class="footer">
+      <button class="btn" onclick="closeSettings()">Cancel</button>
+      <button class="btn primary" onclick="saveSettings()">Save &amp; Reconnect</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js"></script>
+<script>
+  // ============================================================
+  //  EDITABLE FLEET CONFIG — update as you learn coords/IDs
+  // ============================================================
+  const SITES = [
+    {
+      id: "danvers", label: "Danvers, MA — Home Roof",
+      owner: "Farls Danvers Solar", shortName: "2714",
+      nodeId: "!b701934b", numericNodeId: 3070333771,
+      lat: 42.5884858, lon: -70.9744721, alt: 40,
+      role: "ROUTER_LATE", hardware: "RAK WisMesh Repeater Mini",
+      mobile: false, type: "fixed",
+      notes: "Optimized + unique PKI key + FarleyFam channel."
+    },
+    {
+      id: "kensington", label: "Kensington, NH — Brother's House",
+      owner: "(set when configured)", shortName: "",
+      nodeId: "", numericNodeId: null,
+      lat: 42.9367, lon: -70.9706, alt: null,
+      role: "(ROUTER_LATE)", hardware: "NomadStar solar unit",
+      mobile: false, type: "fixed",
+      notes: "Approximate coords — update with brother's actual address. Needs key regen."
+    },
+    {
+      id: "merrymeeting", label: "Merrymeeting Lake, NH — Brother's Camp",
+      owner: "(set when configured)", shortName: "",
+      nodeId: "", numericNodeId: null,
+      lat: 43.5258, lon: -71.1789, alt: null,
+      role: "(ROUTER_LATE)", hardware: "NomadStar solar unit",
+      mobile: false, type: "fixed",
+      notes: "Remote — likely no gateway in RF range. Needs a WiFi node at the camp for meshmap visibility."
+    }
+    // === Add mobile nodes here as your brother gets them, e.g.:
+    // {
+    //   id: "brother-mobile", label: "Brother — Mobile (TRACKER)",
+    //   nodeId: "!xxxxxxxx", numericNodeId: null,
+    //   lat: 42.5884, lon: -70.9744,   // last known
+    //   mobile: true, type: "tracker",
+    //   notes: "Hiking/car node — see live trail on map."
+    // }
+  ];
+
+  // ============================================================
+  //  STATE
+  // ============================================================
+  const LIVE_NODES = {};         // numericNodeId -> {pos, batt, lastHeard, shortName, longName, snr}
+  const TRAILS = {};             // numericNodeId -> array of [lat, lon, t]
+  const MARKERS = {};            // id -> leaflet marker
+  const TRAIL_LINES = {};        // numericNodeId -> leaflet polyline
+  let MQTT_CLIENT = null;
+  let MSG_COUNT = { all: 0, longfast: 0, farleyfam: 0, positions: 0 };
+  let CURRENT_TAB = "all";
+  let SETTINGS = loadSettings();
+
+  function loadSettings() {
+    return {
+      farleyfamPsk: localStorage.getItem("farleyfam_psk") || "",
+      region: localStorage.getItem("mqtt_region") || "US",
+      mqttUrl: localStorage.getItem("mqtt_url") || "wss://mqtt.meshtastic.org:443/mqtt"
+    };
+  }
+
+  // ============================================================
+  //  MAP
+  // ============================================================
+  const map = L.map("map").setView([43.0, -71.05], 8);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+  }).addTo(map);
+
+  function siteIcon(s, isLive) {
+    const colors = { fixed: "#4cc2ff", tracker: "#3fb950" };
+    const color = colors[s.type] || "#9aa7b4";
+    const pulse = isLive ? `box-shadow: 0 0 16px ${color}, 0 0 0 0 ${color}; animation: pulse-marker 2s infinite;` : "";
+    return L.divIcon({
+      className: "",
+      html: `<div style="
+        width: 20px; height: 20px;
+        background: ${color};
+        border: 3px solid #fff;
+        border-radius: 50%;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+        ${pulse}
+      "></div>`,
+      iconSize: [20, 20], iconAnchor: [10, 10]
+    });
+  }
+
+  function placeOrMoveMarker(s) {
+    const isLive = s.numericNodeId && !!LIVE_NODES[s.numericNodeId];
+    const live = LIVE_NODES[s.numericNodeId] || {};
+    const lat = live.lat ?? s.lat;
+    const lon = live.lon ?? s.lon;
+    const meshmapUrl = s.numericNodeId
+      ? `https://meshmap.net/?node_id=${s.numericNodeId}`
+      : `https://meshmap.net/#map=12/${lat}/${lon}`;
+    const liveBadge = isLive ? `<span style="color: #3fb950; font-weight: 700;">● LIVE</span>` : "";
+    const lastHeard = live.lastHeard ? new Date(live.lastHeard).toLocaleTimeString() : "—";
+    const batt = live.batt != null ? `${live.batt}%` : "—";
+    const popup = `
+      <div style="font-family: -apple-system, sans-serif; min-width: 200px;">
+        <strong>${s.label}</strong> ${liveBadge}<br/>
+        <span style="color: #666; font-size: 11px;">${lat.toFixed(5)}, ${lon.toFixed(5)}</span><br/>
+        ${s.nodeId ? `<code>${s.nodeId}</code><br/>` : ""}
+        Battery: ${batt}<br/>
+        Last heard: ${lastHeard}<br/>
+        <a href="${meshmapUrl}" target="_blank">View on meshmap.net →</a>
+      </div>
+    `;
+    if (MARKERS[s.id]) {
+      MARKERS[s.id].setLatLng([lat, lon]);
+      MARKERS[s.id].setIcon(siteIcon(s, isLive));
+      MARKERS[s.id].setPopupContent(popup);
+    } else {
+      MARKERS[s.id] = L.marker([lat, lon], { icon: siteIcon(s, isLive) })
+        .addTo(map).bindPopup(popup);
+    }
+
+    // Trail line for mobile/tracker nodes
+    if (s.mobile && s.numericNodeId && TRAILS[s.numericNodeId]?.length > 1) {
+      const pts = TRAILS[s.numericNodeId].map(p => [p[0], p[1]]);
+      if (TRAIL_LINES[s.numericNodeId]) {
+        TRAIL_LINES[s.numericNodeId].setLatLngs(pts);
+      } else {
+        TRAIL_LINES[s.numericNodeId] = L.polyline(pts, { color: "#3fb950", weight: 3, opacity: 0.6 }).addTo(map);
+      }
+    }
+  }
+
+  SITES.forEach(placeOrMoveMarker);
+  const bounds = L.latLngBounds(SITES.map(s => [s.lat, s.lon]));
+  map.fitBounds(bounds, { padding: [40, 40] });
+
+  // ============================================================
+  //  SITE CARDS
+  // ============================================================
+  function renderCards() {
+    const c = document.getElementById("site-cards");
+    c.innerHTML = "";
+    SITES.forEach(s => {
+      const live = LIVE_NODES[s.numericNodeId] || {};
+      const isLive = !!live.lastHeard;
+      const card = document.createElement("div");
+      card.className = "card";
+      const meshmapUrl = s.numericNodeId
+        ? `https://meshmap.net/?node_id=${s.numericNodeId}`
+        : `https://meshmap.net/#map=13/${s.lat}/${s.lon}`;
+      card.innerHTML = `
+        <h3>
+          <span class="dot ${isLive ? 'good' : 'unknown'}"></span>${s.label}
+          ${isLive ? '<span class="badge live">LIVE</span>' : ''}
+          ${s.mobile ? '<span class="badge info">MOBILE</span>' : ''}
+        </h3>
+        <div class="sub">${s.nodeId || "no node ID yet"}</div>
+        <dl>
+          <dt>Owner</dt>     <dd>${s.owner}</dd>
+          <dt>Short</dt>     <dd>${s.shortName || "—"}</dd>
+          <dt>Coords</dt>    <dd>${(live.lat ?? s.lat).toFixed(4)}, ${(live.lon ?? s.lon).toFixed(4)}</dd>
+          <dt>Battery</dt>   <dd class="${isLive ? 'live' : ''}">${live.batt != null ? live.batt + '%' : '—'}</dd>
+          <dt>Last heard</dt><dd>${live.lastHeard ? new Date(live.lastHeard).toLocaleTimeString() : '—'}</dd>
+          <dt>Role</dt>      <dd>${s.role}</dd>
+          <dt>Hardware</dt>  <dd>${s.hardware}</dd>
+        </dl>
+        <p style="font-size: 11px; color: var(--text-dim); margin: 10px 0 0;">${s.notes}</p>
+        <div class="actions">
+          <a class="btn primary" href="${meshmapUrl}" target="_blank">meshmap.net</a>
+          <a class="btn" href="https://meshmap.net/#map=14/${live.lat ?? s.lat}/${live.lon ?? s.lon}" target="_blank">Local area</a>
+        </div>
+      `;
+      c.appendChild(card);
+    });
+  }
+  renderCards();
+
+  // ============================================================
+  //  FEED
+  // ============================================================
+  const FEED_BUFFER = [];   // {ts, channel, type, sender, body}
+  const MAX_FEED = 500;
+
+  function addFeed(msg) {
+    FEED_BUFFER.unshift(msg);
+    if (FEED_BUFFER.length > MAX_FEED) FEED_BUFFER.pop();
+    MSG_COUNT.all++;
+    if (msg.channel === "LongFast") MSG_COUNT.longfast++;
+    else if (msg.channel === "FarleyFam") MSG_COUNT.farleyfam++;
+    if (msg.type === "position") MSG_COUNT.positions++;
+    updateCounts();
+    renderFeed();
+  }
+
+  function updateCounts() {
+    ["all", "longfast", "farleyfam", "positions"].forEach(t =>
+      document.getElementById(`count-${t}`).textContent = MSG_COUNT[t]
+    );
+  }
+
+  function renderFeed() {
+    const c = document.getElementById("feed-content");
+    const filtered = FEED_BUFFER.filter(m => {
+      if (CURRENT_TAB === "all") return true;
+      if (CURRENT_TAB === "longfast") return m.channel === "LongFast";
+      if (CURRENT_TAB === "farleyfam") return m.channel === "FarleyFam";
+      if (CURRENT_TAB === "positions") return m.type === "position";
+      return true;
+    }).slice(0, 100);
+    c.innerHTML = filtered.length === 0
+      ? `<div class="feed-msg system"><div class="body">No messages in this view yet.</div></div>`
+      : filtered.map(m => `
+        <div class="feed-msg ${m.type} ${m.channel === 'FarleyFam' ? 'farleyfam' : ''}">
+          <span class="sender">${escapeHtml(m.sender || '?')}</span>
+          <span class="time">${new Date(m.ts).toLocaleTimeString()}</span>
+          <div class="body">${escapeHtml(m.body)}</div>
+        </div>`).join("");
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+
+  document.querySelectorAll(".feed-tab").forEach(t => {
+    t.addEventListener("click", () => {
+      document.querySelectorAll(".feed-tab").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      CURRENT_TAB = t.dataset.tab;
+      renderFeed();
+    });
+  });
+
+  // ============================================================
+  //  MQTT
+  // ============================================================
+  function setMqttStatus(state, label) {
+    const el = document.getElementById("mqtt-status");
+    el.className = "conn-status " + state;
+    el.querySelector(".text").textContent = "MQTT: " + label;
+  }
+
+  function connectMqtt() {
+    if (MQTT_CLIENT) { try { MQTT_CLIENT.end(true); } catch(e) {} MQTT_CLIENT = null; }
+    setMqttStatus("connecting", "connecting…");
+
+    const url = SETTINGS.mqttUrl || "wss://mqtt.meshtastic.org:443/mqtt";
+    const region = SETTINGS.region || "US";
+
+    MQTT_CLIENT = mqtt.connect(url, {
+      username: "meshdev",
+      password: "large4cats",
+      clientId: "fleet-" + Math.random().toString(16).slice(2),
+      reconnectPeriod: 5000,
+      connectTimeout: 15000
+    });
+
+    MQTT_CLIENT.on("connect", () => {
+      setMqttStatus("connected", `subscribed to ${region}`);
+      // JSON topic = decoded messages (only works for unencrypted/whitelist-decrypted channels)
+      MQTT_CLIENT.subscribe(`msh/${region}/2/json/LongFast/#`);
+      MQTT_CLIENT.subscribe(`msh/${region}/2/json/FarleyFam/#`);
+      addFeed({ ts: Date.now(), channel: "system", type: "system", sender: "DASHBOARD",
+                body: `Connected to ${url}, listening to LongFast + FarleyFam (region ${region})` });
+    });
+
+    MQTT_CLIENT.on("error", (err) => {
+      setMqttStatus("disconnected", "error — see console");
+      console.error("MQTT error:", err);
+    });
+
+    MQTT_CLIENT.on("offline", () => setMqttStatus("disconnected", "offline, retrying…"));
+    MQTT_CLIENT.on("reconnect", () => setMqttStatus("connecting", "reconnecting…"));
+
+    MQTT_CLIENT.on("message", (topic, payload) => {
+      try { handleMqttMessage(topic, payload); }
+      catch (e) { console.error("msg handler error", e, topic); }
+    });
+  }
+
+  function handleMqttMessage(topic, payload) {
+    // Topic format: msh/US/2/json/CHANNELNAME/!nodeId
+    const parts = topic.split("/");
+    const channel = parts[4] || "?";
+    const msg = JSON.parse(payload.toString());
+    // msg is meshtastic ServiceEnvelope JSON. Shape:
+    //  { from: numericId, to: numericId, channel: int, type: "text"|"position"|"nodeinfo"|"telemetry"|...,
+    //    payload: { ...type-specific... }, timestamp: epoch_secs, ... }
+    const fromNum = msg.from;
+    const ts = (msg.timestamp || Math.floor(Date.now()/1000)) * 1000;
+    const senderNode = LIVE_NODES[fromNum] || {};
+    const sender = senderNode.shortName || senderNode.longName || `!${(fromNum >>> 0).toString(16).padStart(8,'0')}`;
+
+    // ensure node entry exists
+    if (!LIVE_NODES[fromNum]) LIVE_NODES[fromNum] = { lastHeard: ts };
+    LIVE_NODES[fromNum].lastHeard = ts;
+
+    let body = "";
+    let type = "msg";
+
+    switch ((msg.type || "").toLowerCase()) {
+      case "text":
+      case "sendtext":
+        body = msg.payload?.text || msg.payload?.message || JSON.stringify(msg.payload);
+        type = "text";
+        break;
+      case "position":
+        const lat = msg.payload?.latitude_i != null ? msg.payload.latitude_i * 1e-7 : msg.payload?.latitude;
+        const lon = msg.payload?.longitude_i != null ? msg.payload.longitude_i * 1e-7 : msg.payload?.longitude;
+        const alt = msg.payload?.altitude;
+        if (lat != null && lon != null) {
+          LIVE_NODES[fromNum].lat = lat;
+          LIVE_NODES[fromNum].lon = lon;
+          if (alt != null) LIVE_NODES[fromNum].alt = alt;
+          if (!TRAILS[fromNum]) TRAILS[fromNum] = [];
+          TRAILS[fromNum].push([lat, lon, ts]);
+          if (TRAILS[fromNum].length > 200) TRAILS[fromNum].shift();
+          body = `position: ${lat.toFixed(5)}, ${lon.toFixed(5)}${alt != null ? `  alt ${alt}m` : ''}`;
+          updateSiteFromLive(fromNum);
+        } else {
+          body = "(position update with no coords)";
+        }
+        type = "position";
+        break;
+      case "nodeinfo":
+        if (msg.payload?.shortname) LIVE_NODES[fromNum].shortName = msg.payload.shortname;
+        if (msg.payload?.longname)  LIVE_NODES[fromNum].longName = msg.payload.longname;
+        body = `nodeinfo: ${msg.payload?.longname || ''} (${msg.payload?.shortname || ''})`;
+        type = "system";
+        break;
+      case "telemetry":
+        const dev = msg.payload?.device_metrics || msg.payload?.deviceMetrics || msg.payload || {};
+        if (dev.battery_level != null) LIVE_NODES[fromNum].batt = dev.battery_level;
+        if (dev.voltage != null) LIVE_NODES[fromNum].voltage = dev.voltage;
+        body = `telemetry: batt ${dev.battery_level ?? '?'}% / ${dev.voltage ?? '?'}V`;
+        type = "system";
+        updateSiteFromLive(fromNum);
+        break;
+      default:
+        body = `${msg.type}: ${JSON.stringify(msg.payload).slice(0,140)}`;
+    }
+
+    addFeed({ ts, channel, type, sender, body });
+  }
+
+  function updateSiteFromLive(fromNum) {
+    const s = SITES.find(s => s.numericNodeId === fromNum);
+    if (s) {
+      placeOrMoveMarker(s);
+      renderCards();
+    }
+  }
+
+  // ============================================================
+  //  SETTINGS DIALOG
+  // ============================================================
+  function openSettings() {
+    document.getElementById("farleyfam-psk").value = SETTINGS.farleyfamPsk;
+    document.getElementById("mqtt-region").value = SETTINGS.region;
+    document.getElementById("mqtt-url").value = SETTINGS.mqttUrl;
+    document.getElementById("settings-modal").classList.add("open");
+  }
+  function closeSettings() { document.getElementById("settings-modal").classList.remove("open"); }
+  function saveSettings() {
+    SETTINGS.farleyfamPsk = document.getElementById("farleyfam-psk").value.trim();
+    SETTINGS.region = document.getElementById("mqtt-region").value.trim() || "US";
+    SETTINGS.mqttUrl = document.getElementById("mqtt-url").value.trim() || "wss://mqtt.meshtastic.org:443/mqtt";
+    localStorage.setItem("farleyfam_psk", SETTINGS.farleyfamPsk);
+    localStorage.setItem("mqtt_region", SETTINGS.region);
+    localStorage.setItem("mqtt_url", SETTINGS.mqttUrl);
+    closeSettings();
+    connectMqtt();
+  }
+  window.openSettings = openSettings;
+  window.closeSettings = closeSettings;
+  window.saveSettings = saveSettings;
+
+  // ============================================================
+  //  STARTUP
+  // ============================================================
+  document.getElementById("last-refreshed").textContent = "Loaded " + new Date().toLocaleString();
+  connectMqtt();
+
+  // Periodic re-render so "last heard X minutes ago" stays fresh
+  setInterval(() => renderCards(), 30000);
+</script>
+</body>
+</html>
