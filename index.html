@@ -137,7 +137,7 @@
   <section>
     <div class="layout">
       <div>
-        <h2>Network Map</h2>
+        <h2>Network Map <span style="color: var(--text-dim); font-size: 11px; font-weight: 400; margin-left: 8px;">colored markers = fleet · gray dots = <span id="corridor-count">0</span> other meshmap-visible nodes in MA/NH (potential LoRa relays)</span></h2>
         <div id="map"></div>
       </div>
       <div>
@@ -180,6 +180,49 @@
         <p style="margin-top: 0;">Danvers visibility depends on <code>mqtt_bridge.py</code> running on Mike's PC. While it's running, Danvers is on meshmap. Long-term fix: a $25 Heltec V3 indoors near WiFi acts as a 24/7 unattended gateway.</p>
         <p style="color: var(--text-dim); font-size: 11px;">To run: <code>python mqtt_bridge.py COM9</code> from this folder.</p>
       </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Coverage Analysis — Pure LoRa Reach</h2>
+    <div class="ref">
+      <p style="margin-top: 0;"><strong>Goal:</strong> grid-down comms from Mike (Danvers MA) to Jim's two NH sites, using only LoRa (no Internet, no WiFi, no satellite, no cell). MQTT is opportunistic, not required.</p>
+
+      <h3>Distances</h3>
+      <ul>
+        <li><strong>Danvers → Kensington NH</strong>: 24 mi line-of-sight</li>
+        <li><strong>Danvers → Merrymeeting Lake NH</strong>: 66 mi line-of-sight</li>
+      </ul>
+
+      <h3>Current reachability estimate (greedy chain through meshmap-visible nodes)</h3>
+      <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+        <tr style="border-bottom: 1px solid var(--border);"><th style="text-align:left; padding: 4px;">Target</th><th style="text-align:left; padding: 4px;">10 mi/hop (conservative)</th><th style="text-align:left; padding: 4px;">20 mi/hop (rooftop antennas, clear paths)</th></tr>
+        <tr><td style="padding: 4px;">Kensington NH</td><td style="padding: 4px; color: var(--bad);">NOT REACHED — 2-hop dead-end heading wrong direction</td><td style="padding: 4px; color: var(--good);">REACHED in 2 hops</td></tr>
+        <tr><td style="padding: 4px;">Merrymeeting NH</td><td style="padding: 4px; color: var(--bad);">NOT REACHED</td><td style="padding: 4px; color: var(--bad);">NOT REACHED in 6 hops</td></tr>
+      </table>
+
+      <h3>Why these numbers are conservative</h3>
+      <ul>
+        <li><strong>meshmap.net only shows nodes that have ever been seen by an MQTT-uplinking gateway.</strong> Pure-LoRa-only nodes never appear. Real node density is likely 2-5x what the gray dots show.</li>
+        <li>The greedy single-path model underestimates the real protocol — Meshtastic broadcast-floods, so any reachable node along the way retransmits.</li>
+        <li><strong>In a real grid-down scenario, more people deploy nodes</strong> (because they have to). Network gets denser, gap closes.</li>
+      </ul>
+
+      <h3>What's been done to maximize pure-LoRa reach</h3>
+      <ul>
+        <li><code>lora.hop_limit</code> bumped from 3 → <code>7</code> (max). Single change roughly doubles regional reach.</li>
+        <li><code>lora.tx_power = 30</code> (max legal for 915 MHz US ISM).</li>
+        <li><code>lora.sx126x_rx_boosted_gain = true</code> (better RX sensitivity, small power cost).</li>
+        <li>Role = <code>ROUTER_LATE</code> for fixed/elevated nodes — actively rebroadcasts mesh traffic without colliding.</li>
+        <li>FarleyFam channel encryption with strong PSK — messages travel over LoRa encrypted end-to-end, no plaintext over the mesh.</li>
+      </ul>
+
+      <h3>How to close the Merrymeeting gap</h3>
+      <ul>
+        <li><strong>Antenna upgrade</strong> on the lake-cabin WisBlock + Danvers roof — external gain antenna with elevation. Single-hop range of 30-50 mi is achievable with good placement on both ends.</li>
+        <li><strong>Seed a relay node halfway</strong> — anywhere in southern/central NH along the I-93 corridor. A solar repeater at a friend's place in Concord/Manchester would basically guarantee the link.</li>
+        <li><strong>Recruit nodes</strong> — every Meshtastic user in MA/NH along this path strengthens the chain. Public LongFast channel is open; any node helps.</li>
+      </ul>
     </div>
   </section>
 
@@ -472,6 +515,8 @@
     el.querySelector(".text").textContent = label;
   }
 
+  let CORRIDOR_LAYER = null;
+
   async function pollMeshmap() {
     setPollStatus("connecting", "fetching fleet.json…");
     try {
@@ -481,9 +526,11 @@
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const wrapped = await resp.json();
       const data = wrapped.fleet || {};
+      const corridor = wrapped.corridor || [];
       WORLDWIDE_NODE_COUNT = wrapped.total_worldwide || 0;
       const updatedMs = (wrapped.updated || 0) * 1000;
       processSnapshot(data);
+      renderCorridor(corridor);
       LAST_POLL_TS = Date.now();
       document.getElementById("last-refreshed").textContent =
         "Snapshot age: " + (updatedMs ? timeAgo(updatedMs) : "unknown") +
@@ -492,12 +539,37 @@
       const configured = (wrapped.fleet_ids_configured || []).length;
       setPollStatus(
         "connected",
-        `${fleetCount}/${configured} fleet on meshmap • ${WORLDWIDE_NODE_COUNT.toLocaleString()} worldwide`
+        `${fleetCount}/${configured} fleet • ${corridor.length} corridor nodes • ${WORLDWIDE_NODE_COUNT.toLocaleString()} worldwide`
       );
     } catch (err) {
       console.error("Poll failed:", err);
       setPollStatus("disconnected", "error: " + err.message);
     }
+  }
+
+  function renderCorridor(corridor) {
+    // Remove previous corridor layer
+    if (CORRIDOR_LAYER) {
+      CORRIDOR_LAYER.clearLayers();
+      map.removeLayer(CORRIDOR_LAYER);
+    }
+    CORRIDOR_LAYER = L.layerGroup();
+    corridor.forEach(n => {
+      // Skip our own fleet nodes (already rendered as full markers)
+      if (SITES.some(s => String(s.numericNodeId) === String(n.id))) return;
+      const dot = L.circleMarker([n.lat, n.lon], {
+        radius: 4, color: "#7a8794", fillColor: "#7a8794", fillOpacity: 0.6, weight: 1,
+      });
+      dot.bindPopup(`<div style="font-family: -apple-system, sans-serif; min-width: 160px;">
+        <strong>${escapeHtml(n.longName || '?')}</strong><br/>
+        <code style="font-size: 11px;">${escapeHtml(n.shortName || '?')}</code><br/>
+        <span style="font-size: 11px; color: #666;">${escapeHtml(n.role || '')} / ${escapeHtml(n.hwModel || '')}</span><br/>
+        <span style="font-size: 10px; color: #999;">${n.lat.toFixed(4)}, ${n.lon.toFixed(4)}</span>
+      </div>`);
+      CORRIDOR_LAYER.addLayer(dot);
+    });
+    CORRIDOR_LAYER.addTo(map);
+    document.getElementById("corridor-count").textContent = corridor.length;
   }
 
   function processSnapshot(data) {

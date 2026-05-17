@@ -1,16 +1,29 @@
 # Farley Mesh Fleet
 
-Live dashboard for the family's Meshtastic mesh network.
+**Purpose:** grid-down resilient comms between Mike (Danvers MA) and Jim (Kensington NH + Merrymeeting Lake NH) using pure-LoRa Meshtastic. Internet, WiFi, satellite, and cell are explicitly NOT in the threat model — when those go down, this still works.
 
 🔗 **Live dashboard:** https://fructifyme.github.io/mesh-fleet/
 
 ## Fleet
 
-| Site | Device | WiFi | GPS | MQTT path |
-|---|---|---|---|---|
-| Danvers, MA (Mike's roof) | RAK WisMesh Repeater Mini | ❌ | ❌ fixed | via Python bridge on this PC (or a future Heltec V3) |
-| Jim's house + mobile | LILYGO T-Deck Plus EXT | ✅ | ✅ | direct (home WiFi); GPS trail when mobile |
-| Merrymeeting Lake (Jim's cabin) | RAK WisBlock Starter Kit | ❌ | ❌ fixed | only when T-Deck or hotspot is at the camp |
+| Site | Device | Role | Notes |
+|---|---|---|---|
+| Danvers, MA (Mike's roof) | RAK WisMesh Repeater Mini | ROUTER_LATE | Solar + 18650, hop_limit 7 |
+| Jim's house + mobile | LILYGO T-Deck Plus EXT | CLIENT | Built-in screen+kbd, GPS, internal battery |
+| Merrymeeting Lake (Jim's cabin) | RAK WisBlock Starter Kit | ROUTER_LATE | Fixed at the cabin, no Internet up there |
+
+## Distance reality check (pure LoRa)
+
+| Path | Direct distance | Status |
+|---|---|---|
+| Danvers → Kensington NH | 24 mi | Edge of single-hop; reachable with 2 hops + good antennas |
+| Danvers → Merrymeeting NH | 66 mi | At the practical limit of multi-hop hobby mesh; needs more deployed nodes along I-93 OR rooftop gain antennas at both ends |
+
+LoRa LongFast typical real-world single-hop is 5-15 mi (much more with elevation/clear sight). Meshtastic max hop_limit is 7. Dashboard's Coverage Analysis section shows the visible MA/NH nodes along the corridor — note that meshmap-only data understates true node density (pure-LoRa nodes never seen by an MQTT gateway are invisible to this view).
+
+## The MQTT bridge (opportunistic, not core)
+
+When the PC is on with the node connected via USB, `mqtt_bridge.py` publishes the node's outbound packets to `mqtt.meshtastic.org` so the node also shows up on meshmap.net and the dashboard. **This is opportunistic visibility, not part of the grid-down comms path.** When the grid is down, the bridge is irrelevant — LoRa carries the message.
 
 ## How the data flows
 

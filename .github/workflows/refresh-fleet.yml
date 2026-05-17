@@ -34,17 +34,43 @@ jobs:
               # "...",        # Jim Lake Cabin WisBlock (add once known)
           ]
           fleet = {nid: all_data[nid] for nid in FLEET_IDS if nid in all_data}
+
+          # Corridor: all nodes inside the MA/NH bounding box that surrounds Mike's
+          # endpoint (Danvers MA) and Jim's two endpoints (Kensington NH, Merrymeeting Lake NH).
+          # This is for the "grid-down comms" coverage analysis -- pure-LoRa multi-hop
+          # viability between the Farley nodes depends on how many other nodes are
+          # actively deployed along this path.
+          CORRIDOR_BBOX = {"lat_min": 42.3, "lat_max": 43.9, "lon_min": -71.8, "lon_max": -70.6}
+          corridor = []
+          for nid, rec in all_data.items():
+              if not isinstance(rec, dict): continue
+              if "latitude" not in rec or "longitude" not in rec: continue
+              lat = rec["latitude"] * 1e-7
+              lon = rec["longitude"] * 1e-7
+              if not (CORRIDOR_BBOX["lat_min"] <= lat <= CORRIDOR_BBOX["lat_max"]
+                      and CORRIDOR_BBOX["lon_min"] <= lon <= CORRIDOR_BBOX["lon_max"]):
+                  continue
+              corridor.append({
+                  "id": nid, "lat": lat, "lon": lon,
+                  "longName": rec.get("longName", "?"),
+                  "shortName": rec.get("shortName", "?"),
+                  "role": rec.get("role", "?"),
+                  "hwModel": rec.get("hwModel", "?"),
+              })
+
           out = {
               "updated":              int(time.time()),
               "total_worldwide":      len(all_data),
               "fleet_ids_configured": FLEET_IDS,
               "fleet_ids_present":    list(fleet.keys()),
               "fleet":                fleet,
+              "corridor_bbox":        CORRIDOR_BBOX,
+              "corridor":             corridor,
           }
           with open("fleet.json", "w") as f:
               json.dump(out, f, separators=(",", ":"))
-          print(f"Wrote fleet.json: {len(fleet)}/{len(FLEET_IDS)} fleet members present, "
-                f"{len(all_data)} nodes worldwide.")
+          print(f"Wrote fleet.json: {len(fleet)}/{len(FLEET_IDS)} fleet present, "
+                f"{len(corridor)} corridor nodes, {len(all_data)} worldwide.")
           PY
 
       - name: Commit if changed
