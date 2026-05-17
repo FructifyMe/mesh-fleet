@@ -125,8 +125,8 @@
     <h1>📡 Farley Mesh Fleet</h1>
   </div>
   <div class="header-right">
-    <span id="mqtt-status" class="conn-status connecting">
-      <span class="dot"></span><span class="text">MQTT: connecting…</span>
+    <span id="poll-status" class="conn-status connecting">
+      <span class="dot"></span><span class="text">meshmap.net: loading…</span>
     </span>
     <button class="btn" onclick="openSettings()">⚙ Settings</button>
     <span class="meta" id="last-refreshed">—</span>
@@ -141,17 +141,16 @@
         <div id="map"></div>
       </div>
       <div>
-        <h2>Live Feed</h2>
+        <h2>Recent Activity</h2>
         <div class="feed">
           <div class="feed-tabs">
-            <div class="feed-tab active" data-tab="all">All <span class="count" id="count-all">0</span></div>
-            <div class="feed-tab" data-tab="longfast">LongFast <span class="count" id="count-longfast">0</span></div>
-            <div class="feed-tab" data-tab="farleyfam">FarleyFam <span class="count" id="count-farleyfam">0</span></div>
-            <div class="feed-tab" data-tab="positions">Positions <span class="count" id="count-positions">0</span></div>
+            <div class="feed-tab active" data-tab="fleet">Our Fleet <span class="count" id="count-fleet">0</span></div>
+            <div class="feed-tab" data-tab="gateways">Gateways <span class="count" id="count-gateways">0</span></div>
+            <div class="feed-tab" data-tab="changes">Changes <span class="count" id="count-changes">0</span></div>
           </div>
           <div class="feed-content" id="feed-content">
             <div class="feed-msg system">
-              <div class="body">Waiting for MQTT connection…</div>
+              <div class="body">Loading first snapshot from meshmap.net…</div>
             </div>
           </div>
         </div>
@@ -160,7 +159,7 @@
   </section>
 
   <section>
-    <h2>Sites &amp; Nodes <span style="color: var(--text-dim); font-size: 11px; font-weight: 400; margin-left: 8px;">(green dot = updated live via MQTT)</span></h2>
+    <h2>Sites &amp; Nodes <span style="color: var(--text-dim); font-size: 11px; font-weight: 400; margin-left: 8px;">(green dot = present in latest meshmap snapshot)</span></h2>
     <div class="grid" id="site-cards"></div>
   </section>
 
@@ -227,14 +226,14 @@
     <h2>⚙ Settings</h2>
     <p style="color: var(--text-dim); font-size: 13px;">Stored in your browser localStorage. Never sent to any server. Never committed to the repo.</p>
 
-    <label>FarleyFam Channel PSK (base64) — paste from your node config</label>
+    <label>FarleyFam Channel PSK (base64) — saved for the future live-MQTT bridge feature</label>
     <input type="password" id="farleyfam-psk" placeholder="e.g. 4jrBSv6oep7L0+jvoKF1XRMWoF1uYs4gCXErakscjWA=" />
 
-    <label>Region prefix in MQTT topic (default: US)</label>
-    <input type="text" id="mqtt-region" placeholder="US" value="US" />
+    <label>Poll interval in seconds (default: 60, min: 15)</label>
+    <input type="text" id="mqtt-region" placeholder="60" value="60" />
 
-    <label>Custom MQTT broker (default: wss://mqtt.meshtastic.org:443/mqtt)</label>
-    <input type="text" id="mqtt-url" placeholder="wss://mqtt.meshtastic.org:443/mqtt" />
+    <label>CORS proxy prefix (default: api.cors.lol)</label>
+    <input type="text" id="mqtt-url" placeholder="https://api.cors.lol/?url=" />
 
     <div class="footer">
       <button class="btn" onclick="closeSettings()">Cancel</button>
@@ -245,7 +244,6 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-<script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js"></script>
 <script>
   // ============================================================
   //  EDITABLE FLEET CONFIG — update as you learn coords/IDs
@@ -284,20 +282,22 @@
   // ============================================================
   //  STATE
   // ============================================================
-  const LIVE_NODES = {};         // numericNodeId -> {pos, batt, lastHeard, shortName, longName, snr}
+  const LIVE_NODES = {};         // numericNodeId -> {lat, lon, alt, gateways, lastHeard, ...}
   const TRAILS = {};             // numericNodeId -> array of [lat, lon, t]
   const MARKERS = {};            // id -> leaflet marker
   const TRAIL_LINES = {};        // numericNodeId -> leaflet polyline
-  let MQTT_CLIENT = null;
-  let MSG_COUNT = { all: 0, longfast: 0, farleyfam: 0, positions: 0 };
-  let CURRENT_TAB = "all";
+  let CHANGES_LOG = [];           // {ts, sender, body, type}
+  let POLL_TIMER = null;
+  let LAST_POLL_TS = null;
+  let WORLDWIDE_NODE_COUNT = 0;
+  let CURRENT_TAB = "fleet";
   let SETTINGS = loadSettings();
 
   function loadSettings() {
     return {
       farleyfamPsk: localStorage.getItem("farleyfam_psk") || "",
-      region: localStorage.getItem("mqtt_region") || "US",
-      mqttUrl: localStorage.getItem("mqtt_url") || "wss://mqtt.meshtastic.org:443/mqtt"
+      pollIntervalSec: parseInt(localStorage.getItem("poll_interval_sec") || "60", 10),
+      corsProxy: localStorage.getItem("cors_proxy") || "https://api.cors.lol/?url="
     };
   }
 
@@ -390,18 +390,18 @@
       card.innerHTML = `
         <h3>
           <span class="dot ${isLive ? 'good' : 'unknown'}"></span>${s.label}
-          ${isLive ? '<span class="badge live">LIVE</span>' : ''}
+          ${isLive ? '<span class="badge live">ON MESHMAP</span>' : '<span class="badge warn">NOT YET</span>'}
           ${s.mobile ? '<span class="badge info">MOBILE</span>' : ''}
         </h3>
         <div class="sub">${s.nodeId || "no node ID yet"}</div>
         <dl>
-          <dt>Owner</dt>     <dd>${s.owner}</dd>
-          <dt>Short</dt>     <dd>${s.shortName || "—"}</dd>
-          <dt>Coords</dt>    <dd>${(live.lat ?? s.lat).toFixed(4)}, ${(live.lon ?? s.lon).toFixed(4)}</dd>
-          <dt>Battery</dt>   <dd class="${isLive ? 'live' : ''}">${live.batt != null ? live.batt + '%' : '—'}</dd>
-          <dt>Last heard</dt><dd>${live.lastHeard ? new Date(live.lastHeard).toLocaleTimeString() : '—'}</dd>
-          <dt>Role</dt>      <dd>${s.role}</dd>
-          <dt>Hardware</dt>  <dd>${s.hardware}</dd>
+          <dt>Owner</dt>      <dd>${live.longName || s.owner}</dd>
+          <dt>Short</dt>      <dd>${live.shortName || s.shortName || "—"}</dd>
+          <dt>Coords</dt>     <dd>${(live.lat ?? s.lat).toFixed(4)}, ${(live.lon ?? s.lon).toFixed(4)}</dd>
+          <dt>Last heard</dt> <dd class="${isLive ? 'live' : ''}">${live.lastHeard ? timeAgo(live.lastHeard) : '—'}</dd>
+          <dt>Gateways</dt>   <dd>${live.gatewayCount != null ? live.gatewayCount + ' uplinks' : '—'}</dd>
+          <dt>Role</dt>       <dd>${live.role || s.role}</dd>
+          <dt>Hardware</dt>   <dd>${live.hwModel || s.hardware}</dd>
         </dl>
         <p style="font-size: 11px; color: var(--text-dim); margin: 10px 0 0;">${s.notes}</p>
         <div class="actions">
@@ -415,43 +415,180 @@
   renderCards();
 
   // ============================================================
-  //  FEED
+  //  MESHMAP POLLING
   // ============================================================
-  const FEED_BUFFER = [];   // {ts, channel, type, sender, body}
-  const MAX_FEED = 500;
+  const MESHMAP_URL = "https://meshmap.net/nodes.json";
 
-  function addFeed(msg) {
-    FEED_BUFFER.unshift(msg);
-    if (FEED_BUFFER.length > MAX_FEED) FEED_BUFFER.pop();
-    MSG_COUNT.all++;
-    if (msg.channel === "LongFast") MSG_COUNT.longfast++;
-    else if (msg.channel === "FarleyFam") MSG_COUNT.farleyfam++;
-    if (msg.type === "position") MSG_COUNT.positions++;
-    updateCounts();
+  function setPollStatus(state, label) {
+    const el = document.getElementById("poll-status");
+    el.className = "conn-status " + state;
+    el.querySelector(".text").textContent = "meshmap.net: " + label;
+  }
+
+  async function pollMeshmap() {
+    setPollStatus("connecting", "fetching…");
+    try {
+      const proxy = SETTINGS.corsProxy || "https://api.cors.lol/?url=";
+      const url = proxy + encodeURIComponent(MESHMAP_URL);
+      const resp = await fetch(url, { cache: "no-store" });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      WORLDWIDE_NODE_COUNT = Object.keys(data).length;
+      processSnapshot(data);
+      LAST_POLL_TS = Date.now();
+      document.getElementById("last-refreshed").textContent =
+        "Last poll: " + new Date(LAST_POLL_TS).toLocaleTimeString();
+      setPollStatus("connected", `${WORLDWIDE_NODE_COUNT.toLocaleString()} nodes worldwide`);
+    } catch (err) {
+      console.error("Poll failed:", err);
+      setPollStatus("disconnected", "error — " + err.message);
+    }
+  }
+
+  function processSnapshot(data) {
+    const newChanges = [];
+
+    SITES.forEach(s => {
+      if (!s.numericNodeId) return;
+      const key = String(s.numericNodeId);
+      const record = data[key];
+      const prev = LIVE_NODES[s.numericNodeId];
+
+      if (record) {
+        // meshmap stores lat/lon as int32 * 1e7
+        const lat = record.latitude * 1e-7;
+        const lon = record.longitude * 1e-7;
+        const alt = record.altitude;
+        const seenBy = record.seenBy || {};
+        const gatewayTs = Object.values(seenBy).filter(t => typeof t === "number");
+        const latestSeen = gatewayTs.length ? Math.max(...gatewayTs) * 1000 : null;
+
+        const wasOffline = !prev || !prev.lastHeard;
+        const positionMoved = prev && (prev.lat !== lat || prev.lon !== lon);
+
+        LIVE_NODES[s.numericNodeId] = {
+          lat, lon, alt,
+          longName: record.longName,
+          shortName: record.shortName,
+          hwModel: record.hwModel,
+          role: record.role,
+          gateways: Object.keys(seenBy),
+          gatewayCount: Object.keys(seenBy).length,
+          lastHeard: latestSeen,
+          firstSeen: prev?.firstSeen ?? Date.now()
+        };
+
+        // Trail for mobile/tracker nodes
+        if (s.mobile) {
+          if (!TRAILS[s.numericNodeId]) TRAILS[s.numericNodeId] = [];
+          const last = TRAILS[s.numericNodeId].at(-1);
+          if (!last || last[0] !== lat || last[1] !== lon) {
+            TRAILS[s.numericNodeId].push([lat, lon, latestSeen || Date.now()]);
+            if (TRAILS[s.numericNodeId].length > 100) TRAILS[s.numericNodeId].shift();
+          }
+        }
+
+        // Detect changes
+        if (wasOffline) {
+          newChanges.push({
+            ts: Date.now(), sender: s.label,
+            body: `Now visible on meshmap (${Object.keys(seenBy).length} gateway${Object.keys(seenBy).length === 1 ? '' : 's'})`,
+            type: "system"
+          });
+        } else if (positionMoved && s.mobile) {
+          const dist = haversineKm(prev.lat, prev.lon, lat, lon);
+          newChanges.push({
+            ts: Date.now(), sender: s.label,
+            body: `Moved ${dist.toFixed(2)} km → ${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+            type: "position"
+          });
+        }
+
+        placeOrMoveMarker(s);
+      }
+    });
+
+    CHANGES_LOG = newChanges.concat(CHANGES_LOG).slice(0, 200);
+    renderCards();
     renderFeed();
   }
 
-  function updateCounts() {
-    ["all", "longfast", "farleyfam", "positions"].forEach(t =>
-      document.getElementById(`count-${t}`).textContent = MSG_COUNT[t]
-    );
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 +
+      Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(a));
   }
 
+  function timeAgo(ts) {
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60) return `${s}s ago`;
+    if (s < 3600) return `${Math.floor(s/60)}m ago`;
+    if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+    return `${Math.floor(s/86400)}d ago`;
+  }
+
+  // ============================================================
+  //  ACTIVITY FEED (Fleet / Gateways / Changes tabs)
+  // ============================================================
   function renderFeed() {
     const c = document.getElementById("feed-content");
-    const filtered = FEED_BUFFER.filter(m => {
-      if (CURRENT_TAB === "all") return true;
-      if (CURRENT_TAB === "longfast") return m.channel === "LongFast";
-      if (CURRENT_TAB === "farleyfam") return m.channel === "FarleyFam";
-      if (CURRENT_TAB === "positions") return m.type === "position";
-      return true;
-    }).slice(0, 100);
-    c.innerHTML = filtered.length === 0
-      ? `<div class="feed-msg system"><div class="body">No messages in this view yet.</div></div>`
-      : filtered.map(m => `
-        <div class="feed-msg ${m.type} ${m.channel === 'FarleyFam' ? 'farleyfam' : ''}">
+    let items = [];
+    let gwMap = {};
+
+    if (CURRENT_TAB === "fleet") {
+      items = SITES.map(s => {
+        const live = LIVE_NODES[s.numericNodeId];
+        if (!s.numericNodeId) {
+          return { ts: 0, sender: s.label, body: "Node ID not yet set — update the SITES array in index.html source", type: "system" };
+        }
+        if (!live) {
+          return { ts: 0, sender: s.label, body: "Not yet on meshmap. Either no gateway has heard it, or the JSON dump hasn't been regenerated since it broadcast.", type: "system" };
+        }
+        return {
+          ts: live.lastHeard || 0,
+          sender: s.label,
+          body: `${live.lastHeard ? '✓ Heard ' + timeAgo(live.lastHeard) : 'No timestamp'} • ${live.gatewayCount} gateway uplink${live.gatewayCount === 1 ? '' : 's'} • ${live.role || s.role || ''} • ${live.hwModel || ''}`,
+          type: "system"
+        };
+      });
+    } else if (CURRENT_TAB === "gateways") {
+      SITES.forEach(s => {
+        const live = LIVE_NODES[s.numericNodeId];
+        if (live?.gateways) {
+          live.gateways.forEach(g => {
+            if (!gwMap[g]) gwMap[g] = [];
+            gwMap[g].push(s.shortName || s.label.split(" — ")[0]);
+          });
+        }
+      });
+      items = Object.entries(gwMap)
+        .sort((a, b) => b[1].length - a[1].length)
+        .map(([g, who]) => ({
+          ts: 0,
+          sender: g.replace(/^msh\//, ''),
+          body: `Heard our: ${who.join(", ")}`,
+          type: "system"
+        }));
+      if (!items.length) items = [{ ts: 0, sender: "—", body: "No gateways recorded yet (our nodes aren't on meshmap yet)", type: "system" }];
+    } else if (CURRENT_TAB === "changes") {
+      items = CHANGES_LOG;
+      if (!items.length) items = [{ ts: 0, sender: "—", body: "No changes observed yet. Populates as nodes appear/move between polls.", type: "system" }];
+    }
+
+    // Update tab counts
+    document.getElementById("count-fleet").textContent = SITES.filter(s => s.numericNodeId).length;
+    document.getElementById("count-gateways").textContent = Object.keys(gwMap).length;
+    document.getElementById("count-changes").textContent = CHANGES_LOG.length;
+
+    c.innerHTML = items.length === 0
+      ? `<div class="feed-msg system"><div class="body">No data.</div></div>`
+      : items.map(m => `
+        <div class="feed-msg ${m.type}">
           <span class="sender">${escapeHtml(m.sender || '?')}</span>
-          <span class="time">${new Date(m.ts).toLocaleTimeString()}</span>
+          ${m.ts ? `<span class="time">${new Date(m.ts).toLocaleTimeString()}</span>` : ''}
           <div class="body">${escapeHtml(m.body)}</div>
         </div>`).join("");
   }
@@ -470,157 +607,42 @@
   });
 
   // ============================================================
-  //  MQTT
-  // ============================================================
-  function setMqttStatus(state, label) {
-    const el = document.getElementById("mqtt-status");
-    el.className = "conn-status " + state;
-    el.querySelector(".text").textContent = "MQTT: " + label;
-  }
-
-  function connectMqtt() {
-    if (MQTT_CLIENT) { try { MQTT_CLIENT.end(true); } catch(e) {} MQTT_CLIENT = null; }
-    setMqttStatus("connecting", "connecting…");
-
-    const url = SETTINGS.mqttUrl || "wss://mqtt.meshtastic.org:443/mqtt";
-    const region = SETTINGS.region || "US";
-
-    MQTT_CLIENT = mqtt.connect(url, {
-      username: "meshdev",
-      password: "large4cats",
-      clientId: "fleet-" + Math.random().toString(16).slice(2),
-      reconnectPeriod: 5000,
-      connectTimeout: 15000
-    });
-
-    MQTT_CLIENT.on("connect", () => {
-      setMqttStatus("connected", `subscribed to ${region}`);
-      // JSON topic = decoded messages (only works for unencrypted/whitelist-decrypted channels)
-      MQTT_CLIENT.subscribe(`msh/${region}/2/json/LongFast/#`);
-      MQTT_CLIENT.subscribe(`msh/${region}/2/json/FarleyFam/#`);
-      addFeed({ ts: Date.now(), channel: "system", type: "system", sender: "DASHBOARD",
-                body: `Connected to ${url}, listening to LongFast + FarleyFam (region ${region})` });
-    });
-
-    MQTT_CLIENT.on("error", (err) => {
-      setMqttStatus("disconnected", "error — see console");
-      console.error("MQTT error:", err);
-    });
-
-    MQTT_CLIENT.on("offline", () => setMqttStatus("disconnected", "offline, retrying…"));
-    MQTT_CLIENT.on("reconnect", () => setMqttStatus("connecting", "reconnecting…"));
-
-    MQTT_CLIENT.on("message", (topic, payload) => {
-      try { handleMqttMessage(topic, payload); }
-      catch (e) { console.error("msg handler error", e, topic); }
-    });
-  }
-
-  function handleMqttMessage(topic, payload) {
-    // Topic format: msh/US/2/json/CHANNELNAME/!nodeId
-    const parts = topic.split("/");
-    const channel = parts[4] || "?";
-    const msg = JSON.parse(payload.toString());
-    // msg is meshtastic ServiceEnvelope JSON. Shape:
-    //  { from: numericId, to: numericId, channel: int, type: "text"|"position"|"nodeinfo"|"telemetry"|...,
-    //    payload: { ...type-specific... }, timestamp: epoch_secs, ... }
-    const fromNum = msg.from;
-    const ts = (msg.timestamp || Math.floor(Date.now()/1000)) * 1000;
-    const senderNode = LIVE_NODES[fromNum] || {};
-    const sender = senderNode.shortName || senderNode.longName || `!${(fromNum >>> 0).toString(16).padStart(8,'0')}`;
-
-    // ensure node entry exists
-    if (!LIVE_NODES[fromNum]) LIVE_NODES[fromNum] = { lastHeard: ts };
-    LIVE_NODES[fromNum].lastHeard = ts;
-
-    let body = "";
-    let type = "msg";
-
-    switch ((msg.type || "").toLowerCase()) {
-      case "text":
-      case "sendtext":
-        body = msg.payload?.text || msg.payload?.message || JSON.stringify(msg.payload);
-        type = "text";
-        break;
-      case "position":
-        const lat = msg.payload?.latitude_i != null ? msg.payload.latitude_i * 1e-7 : msg.payload?.latitude;
-        const lon = msg.payload?.longitude_i != null ? msg.payload.longitude_i * 1e-7 : msg.payload?.longitude;
-        const alt = msg.payload?.altitude;
-        if (lat != null && lon != null) {
-          LIVE_NODES[fromNum].lat = lat;
-          LIVE_NODES[fromNum].lon = lon;
-          if (alt != null) LIVE_NODES[fromNum].alt = alt;
-          if (!TRAILS[fromNum]) TRAILS[fromNum] = [];
-          TRAILS[fromNum].push([lat, lon, ts]);
-          if (TRAILS[fromNum].length > 200) TRAILS[fromNum].shift();
-          body = `position: ${lat.toFixed(5)}, ${lon.toFixed(5)}${alt != null ? `  alt ${alt}m` : ''}`;
-          updateSiteFromLive(fromNum);
-        } else {
-          body = "(position update with no coords)";
-        }
-        type = "position";
-        break;
-      case "nodeinfo":
-        if (msg.payload?.shortname) LIVE_NODES[fromNum].shortName = msg.payload.shortname;
-        if (msg.payload?.longname)  LIVE_NODES[fromNum].longName = msg.payload.longname;
-        body = `nodeinfo: ${msg.payload?.longname || ''} (${msg.payload?.shortname || ''})`;
-        type = "system";
-        break;
-      case "telemetry":
-        const dev = msg.payload?.device_metrics || msg.payload?.deviceMetrics || msg.payload || {};
-        if (dev.battery_level != null) LIVE_NODES[fromNum].batt = dev.battery_level;
-        if (dev.voltage != null) LIVE_NODES[fromNum].voltage = dev.voltage;
-        body = `telemetry: batt ${dev.battery_level ?? '?'}% / ${dev.voltage ?? '?'}V`;
-        type = "system";
-        updateSiteFromLive(fromNum);
-        break;
-      default:
-        body = `${msg.type}: ${JSON.stringify(msg.payload).slice(0,140)}`;
-    }
-
-    addFeed({ ts, channel, type, sender, body });
-  }
-
-  function updateSiteFromLive(fromNum) {
-    const s = SITES.find(s => s.numericNodeId === fromNum);
-    if (s) {
-      placeOrMoveMarker(s);
-      renderCards();
-    }
-  }
-
-  // ============================================================
-  //  SETTINGS DIALOG
+  //  SETTINGS DIALOG  (PSK kept for future MQTT bridge feature)
   // ============================================================
   function openSettings() {
     document.getElementById("farleyfam-psk").value = SETTINGS.farleyfamPsk;
-    document.getElementById("mqtt-region").value = SETTINGS.region;
-    document.getElementById("mqtt-url").value = SETTINGS.mqttUrl;
+    document.getElementById("mqtt-region").value = String(SETTINGS.pollIntervalSec);
+    document.getElementById("mqtt-url").value = SETTINGS.corsProxy;
     document.getElementById("settings-modal").classList.add("open");
   }
   function closeSettings() { document.getElementById("settings-modal").classList.remove("open"); }
   function saveSettings() {
     SETTINGS.farleyfamPsk = document.getElementById("farleyfam-psk").value.trim();
-    SETTINGS.region = document.getElementById("mqtt-region").value.trim() || "US";
-    SETTINGS.mqttUrl = document.getElementById("mqtt-url").value.trim() || "wss://mqtt.meshtastic.org:443/mqtt";
+    SETTINGS.pollIntervalSec = Math.max(15, parseInt(document.getElementById("mqtt-region").value.trim() || "60", 10));
+    SETTINGS.corsProxy = document.getElementById("mqtt-url").value.trim() || "https://api.cors.lol/?url=";
     localStorage.setItem("farleyfam_psk", SETTINGS.farleyfamPsk);
-    localStorage.setItem("mqtt_region", SETTINGS.region);
-    localStorage.setItem("mqtt_url", SETTINGS.mqttUrl);
+    localStorage.setItem("poll_interval_sec", String(SETTINGS.pollIntervalSec));
+    localStorage.setItem("cors_proxy", SETTINGS.corsProxy);
     closeSettings();
-    connectMqtt();
+    startPolling();
   }
   window.openSettings = openSettings;
   window.closeSettings = closeSettings;
   window.saveSettings = saveSettings;
 
+  function startPolling() {
+    if (POLL_TIMER) clearInterval(POLL_TIMER);
+    pollMeshmap();
+    POLL_TIMER = setInterval(pollMeshmap, SETTINGS.pollIntervalSec * 1000);
+  }
+
   // ============================================================
   //  STARTUP
   // ============================================================
   document.getElementById("last-refreshed").textContent = "Loaded " + new Date().toLocaleString();
-  connectMqtt();
-
-  // Periodic re-render so "last heard X minutes ago" stays fresh
-  setInterval(() => renderCards(), 30000);
+  renderFeed();        // initial empty render
+  startPolling();      // kicks off the meshmap fetch loop
+  setInterval(() => { renderCards(); renderFeed(); }, 30000);  // keep "X min ago" timestamps fresh
 </script>
 </body>
 </html>
